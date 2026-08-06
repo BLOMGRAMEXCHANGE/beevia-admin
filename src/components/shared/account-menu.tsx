@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, LogOut, User } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -12,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useCurrentAdmin } from "@/hooks/use-current-admin";
 import { ROLE_LABEL } from "@/lib/roles";
-import { clearSession } from "@/lib/token-store";
+import { logout } from "@/features/auth/api";
 
 function clearCookie(name: string) {
   document.cookie = `${name}=; Max-Age=0; path=/`;
@@ -20,12 +21,14 @@ function clearCookie(name: string) {
 
 export function AccountMenu() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: admin } = useCurrentAdmin();
 
   function handleLogout() {
-    clearSession();
+    logout();
     clearCookie("admin_session");
     clearCookie("admin_role");
+    queryClient.removeQueries({ queryKey: ["current-admin"] });
     router.push("/login");
   }
 

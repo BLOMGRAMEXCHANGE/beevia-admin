@@ -2,11 +2,15 @@ import type { AdminAccount, AdminRole, CurrentAdmin } from "@/types/admin";
 import type {
   AccountType,
   AppUser,
+  AuditEntry,
   CaseNote,
+  KycResult,
+  KycVerificationMethod,
   UserAccountStatus,
   VerificationStatus,
   WalletStatus,
 } from "@/types/user";
+import { ONBOARDING_STEPS_ORDER } from "@/features/users/onboarding";
 
 export const DEMO_ACCOUNTS: { email: string; name: string; role: AdminRole }[] =
   [
@@ -220,6 +224,15 @@ const WALLET_POOL: WalletStatus[] = [
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+const KYC_METHOD_POOL: KycVerificationMethod[] = ["face", "record"];
+const KYC_RESULT_POOL: KycResult[] = [
+  "passed",
+  "passed",
+  "passed",
+  "pending",
+  "failed",
+];
+
 function generateMockUsers(count: number): AppUser[] {
   const now = Date.now();
 
@@ -240,19 +253,55 @@ function generateMockUsers(count: number): AppUser[] {
       now - ((i * 5) % 30) * DAY_MS - (i % 24) * 3600_000
     ).toISOString();
 
+    // Every 7th user is still mid-onboarding so the "stuck" state is testable.
+    const onboardingStepIndex = i % 7;
+    const onboardingStatus =
+      onboardingStepIndex < ONBOARDING_STEPS_ORDER.length
+        ? "in_progress"
+        : "complete";
+    const onboardingStep =
+      onboardingStatus === "in_progress"
+        ? ONBOARDING_STEPS_ORDER[onboardingStepIndex]
+        : null;
+
+    const dateOfBirth =
+      onboardingStep === "profile_details"
+        ? null
+        : new Date(
+            now - (24 + (i % 40)) * 365 * DAY_MS - (i % 28) * DAY_MS
+          ).toISOString();
+
+    const hasKyc =
+      accountType === "chat_banking" && onboardingStatus === "complete";
+    const kyc = hasKyc
+      ? {
+          method: KYC_METHOD_POOL[i % KYC_METHOD_POOL.length],
+          result: KYC_RESULT_POOL[i % KYC_RESULT_POOL.length],
+          verifiedAt: new Date(now - (i * 3 + 2) * DAY_MS).toISOString(),
+          bvnLast4: String(1000 + ((i * 37) % 9000)).slice(-4),
+        }
+      : null;
+
     return {
       id: `user-${i + 1}`,
       userCode: `#BVA${1100 + i}`,
       fullName: `${firstName} ${lastName}`,
       username: `@${firstName.toLowerCase()}${lastName[0].toLowerCase()}`,
-      email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.com`,
+      email:
+        accountType === "chat_only" && i % 4 === 0
+          ? null
+          : `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.com`,
       phone: `+${country.dialCode} ${String(1000000 + i * 7919).slice(0, 9)}`,
+      dateOfBirth,
       country: country.name,
       avatarColor: AVATAR_PALETTE[i % AVATAR_PALETTE.length],
       accountType,
       verification,
       walletStatus,
       status,
+      onboardingStatus,
+      onboardingStep,
+      kyc,
       createdAt,
       lastActiveAt,
     } satisfies AppUser;
@@ -269,6 +318,20 @@ export const mockCaseNotes: Record<string, CaseNote[]> = {
       authorId: "admin-2",
       authorName: "Cam Compliance",
       body: "Flagged for unusual transfer pattern; account suspended pending review.",
+      createdAt: "2025-01-18T14:30:00.000Z",
+    },
+  ],
+};
+
+export const mockAuditTrail: Record<string, AuditEntry[]> = {
+  "user-2": [
+    {
+      id: "audit-1",
+      userId: "user-2",
+      action: "suspended",
+      reason: "suspicious_login_activity",
+      note: "Multiple failed login attempts from a new device.",
+      actingAdminName: "Cam Compliance",
       createdAt: "2025-01-18T14:30:00.000Z",
     },
   ],

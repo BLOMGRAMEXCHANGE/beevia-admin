@@ -10,11 +10,18 @@ import type {
   AdminAccountStatus,
   AdminRole,
 } from "@/types/admin";
-import type { AppUser, CaseNote, UserAccountStatus } from "@/types/user";
+import type {
+  AppUser,
+  AuditEntry,
+  CaseNote,
+  SuspensionReason,
+  UserAccountStatus,
+} from "@/types/user";
 import {
   findDemoAccountByEmail,
   getCurrentMockAdmin,
   mockAdminAccounts,
+  mockAuditTrail,
   mockCaseNotes,
   mockUsers,
   setCurrentMockAdmin,
@@ -99,7 +106,7 @@ export const mockAdapter: AxiosAdapter = async (config) => {
       ? mockUsers.filter(
           (user) =>
             user.fullName.toLowerCase().includes(query) ||
-            user.email.toLowerCase().includes(query)
+            (user.email?.toLowerCase().includes(query) ?? false)
         )
       : mockUsers;
     return ok<AppUser[]>([...results], config);
@@ -109,13 +116,43 @@ export const mockAdapter: AxiosAdapter = async (config) => {
   if (userMatch && method === "get") {
     const user = mockUsers.find((candidate) => candidate.id === userMatch[1]);
     if (!user) return notFound(config);
-    return ok(user, config);
+    // TODO(backend): enforce this same role check server-side — a Support-role
+    // request must never receive the kyc object (or an unmasked BVN) at all.
+    const role = getCurrentMockAdmin().role;
+    const scopedUser =
+      role === "support" && user.kyc ? { ...user, kyc: null } : user;
+    return ok(scopedUser, config);
   }
   if (userMatch && method === "patch") {
-    const { status } = parseBody(config) as { status?: UserAccountStatus };
-    const user = updateById(mockUsers, userMatch[1], status ? { status } : {});
+    const userId = userMatch[1];
+    const { status, reason, note } = parseBody(config) as {
+      status?: UserAccountStatus;
+      reason?: SuspensionReason;
+      note?: string;
+    };
+    const user = updateById(mockUsers, userId, status ? { status } : {});
     if (!user) return notFound(config);
+
+    if (status === "suspended" || status === "active") {
+      const admin = getCurrentMockAdmin();
+      const entry: AuditEntry = {
+        id: `audit-${Date.now()}`,
+        userId,
+        action: status === "suspended" ? "suspended" : "reactivated",
+        reason,
+        note,
+        actingAdminName: admin.name,
+        createdAt: new Date().toISOString(),
+      };
+      mockAuditTrail[userId] = [entry, ...(mockAuditTrail[userId] ?? [])];
+    }
+
     return ok(user, config);
+  }
+
+  const auditTrailMatch = url.match(/^\/users\/([^/]+)\/audit-trail$/);
+  if (auditTrailMatch && method === "get") {
+    return ok<AuditEntry[]>(mockAuditTrail[auditTrailMatch[1]] ?? [], config);
   }
 
   const caseNotesMatch = url.match(/^\/users\/([^/]+)\/case-notes$/);

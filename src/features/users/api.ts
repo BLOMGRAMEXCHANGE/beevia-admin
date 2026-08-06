@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import type { AppUser, CaseNote, UserAccountStatus } from "@/types/user";
+import type {
+  AppUser,
+  AuditEntry,
+  CaseNote,
+  SuspensionReason,
+  UserAccountStatus,
+} from "@/types/user";
 
 export function useUsers() {
   return useQuery({
@@ -36,18 +42,42 @@ export function useUserCaseNotes(userId: string) {
   });
 }
 
+interface UpdateUserStatusInput {
+  status: UserAccountStatus;
+  reason?: SuspensionReason;
+  note?: string;
+}
+
 export function useUpdateUserStatus(userId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (status: UserAccountStatus) => {
+    mutationFn: async ({ status, reason, note }: UpdateUserStatusInput) => {
       const { data } = await apiClient.patch<AppUser>(`/users/${userId}`, {
         status,
+        reason,
+        note,
       });
       return data;
     },
     onSuccess: (updatedUser) => {
       queryClient.setQueryData(["users", userId], updatedUser);
+      queryClient.invalidateQueries({
+        queryKey: ["users", userId, "audit-trail"],
+      });
     },
+  });
+}
+
+export function useUserAuditTrail(userId: string) {
+  return useQuery({
+    queryKey: ["users", userId, "audit-trail"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<AuditEntry[]>(
+        `/users/${userId}/audit-trail`
+      );
+      return data;
+    },
+    enabled: Boolean(userId),
   });
 }
 

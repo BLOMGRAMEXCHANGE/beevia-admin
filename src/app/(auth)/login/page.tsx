@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,14 +21,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { apiClient } from "@/lib/api-client";
-import { setAccessToken } from "@/lib/token-store";
-import type { AdminRole } from "@/types/admin";
+import { login } from "@/features/auth/api";
 
 const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === "true";
 
 export default function LoginPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -39,18 +39,15 @@ export default function LoginPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const { data } = await apiClient.post<{
-        accessToken: string;
-        role?: AdminRole;
-      }>("/auth/login", { email, password });
-      setAccessToken(data.accessToken);
-      if (data.role) {
-        document.cookie = `admin_session=mock; path=/`;
-        document.cookie = `admin_role=${data.role}; path=/`;
-      }
+      const admin = await login(email, password);
+      document.cookie = `admin_session=1; path=/`;
+      document.cookie = `admin_role=${admin.role}; path=/`;
+      queryClient.setQueryData(["current-admin"], admin);
       router.push("/users");
-    } catch {
-      setError("Invalid email or password.");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Invalid email or password.";
+      setError(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -67,7 +64,7 @@ export default function LoginPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {USE_MOCKS && (
+        {/* {USE_MOCKS && (
           <div className="mb-4 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
             <p className="mb-1 font-medium text-foreground">
               Preview mode — any password works
@@ -76,7 +73,7 @@ export default function LoginPage() {
             <p>compliance@beevia.dev — Compliance</p>
             <p>admin@beevia.dev — Super Admin</p>
           </div>
-        )}
+        )} */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email">Work Email</Label>

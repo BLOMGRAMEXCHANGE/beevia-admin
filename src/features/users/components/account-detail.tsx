@@ -2,53 +2,88 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AccountStatusBadge } from "@/features/users/components/account-status-badge";
-import { SuspendReactivateButton } from "@/features/users/components/suspend-reactivate-button";
-import { CaseNotes } from "@/features/users/components/case-notes";
+import { RoleGate } from "@/components/shared/role-gate";
 import { useUserDetail } from "@/features/users/api";
+import { AccountHeader } from "@/features/users/components/account-header";
+import { ProfileInfo } from "@/features/users/components/profile-info";
+import { OnboardingProgress } from "@/features/users/components/onboarding-progress";
+import { WalletStatusSection } from "@/features/users/components/wallet-status-section";
+import { KycPanel } from "@/features/users/components/kyc-panel";
+import { SuspendReactivateDialog } from "@/features/users/components/suspend-reactivate-dialog";
+import { CaseNotes } from "@/features/users/components/case-notes";
+import { AuditTrail } from "@/features/users/components/audit-trail";
+
+function AccountDetailSkeleton() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center gap-4">
+        <Skeleton className="size-10 rounded-full" />
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-32" />
+        </div>
+      </div>
+      <Skeleton className="h-40 w-full" />
+      <Skeleton className="h-32 w-full" />
+      <Skeleton className="h-32 w-full" />
+    </div>
+  );
+}
 
 export function AccountDetail({ userId }: { userId: string }) {
-  const { data: user, isLoading } = useUserDetail(userId);
+  const { data: user, isLoading, isError } = useUserDetail(userId);
 
-  if (isLoading || !user) {
+  if (isLoading) {
+    return <AccountDetailSkeleton />;
+  }
+
+  if (isError || !user) {
     return (
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-40 w-full" />
-      </div>
+      <Card>
+        <CardContent className="py-10 text-center">
+          <p className="font-medium">User not found</p>
+          <p className="text-sm text-muted-foreground">
+            This account could not be loaded. It may not exist, or the request
+            failed.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="font-heading">{user.fullName}</CardTitle>
-            <p className="text-sm text-muted-foreground">{user.email}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <AccountStatusBadge status={user.status} />
-            <SuspendReactivateButton user={user} />
-          </div>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-muted-foreground">Phone</p>
-            <p>{user.phone ?? "—"}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Member since</p>
-            <p>{new Date(user.createdAt).toLocaleDateString()}</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-between">
+        <AccountHeader user={user} />
+        <SuspendReactivateDialog user={user} />
+      </div>
+
+      <ProfileInfo user={user} />
+      <OnboardingProgress user={user} />
+
+      {user.accountType === "chat_banking" && (
+        <WalletStatusSection user={user} />
+      )}
+
+      <RoleGate allow={["compliance", "super_admin"]}>
+        <KycPanel user={user} />
+      </RoleGate>
+
       <Card>
         <CardHeader>
           <CardTitle className="font-heading text-base">Case notes</CardTitle>
         </CardHeader>
         <CardContent>
           <CaseNotes userId={userId} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-heading text-base">Audit trail</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AuditTrail userId={userId} />
         </CardContent>
       </Card>
     </div>

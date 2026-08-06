@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/shared/back-button";
 import { AccountDetail } from "@/features/users/components/account-detail";
 
 export default async function UserDetailPage({
@@ -8,7 +9,7 @@ export default async function UserDetailPage({
   const { id } = await params;
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="font-heading text-2xl">Account detail</h1>
+      <BackButton />
       <AccountDetail userId={id} />
     </div>
   );

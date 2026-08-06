@@ -126,7 +126,7 @@ export function UsersTable() {
     return (users ?? []).filter((user) => {
       if (query) {
         const haystack =
-          `${user.fullName} ${user.username} ${user.email}`.toLowerCase();
+          `${user.fullName} ${user.username} ${user.email ?? ""}`.toLowerCase();
         if (!haystack.includes(query)) return false;
       }
       if (country !== "all" && user.country !== country) return false;
@@ -173,7 +173,7 @@ export function UsersTable() {
         userCode: user.userCode,
         fullName: user.fullName,
         username: user.username,
-        email: user.email,
+        email: user.email ?? "",
         phone: user.phone,
         country: user.country,
         accountType: ACCOUNT_TYPE_LABEL[user.accountType],
@@ -216,7 +216,7 @@ export function UsersTable() {
       header: "Contact",
       cell: (user) => (
         <div className="flex flex-col">
-          <span>{user.email}</span>
+          <span>{user.email ?? "Not provided"}</span>
           <span className="text-xs text-muted-foreground">{user.phone}</span>
         </div>
       ),
