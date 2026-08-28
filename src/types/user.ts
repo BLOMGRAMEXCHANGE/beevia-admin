@@ -1,25 +1,47 @@
-export type UserAccountStatus = "active" | "restricted" | "suspended";
+export type UserAccountStatus =
+  | "active"
+  | "restricted"
+  | "suspended"
+  | "deactivated"
+  | "deleting"
+  | "deleted";
 export type VerificationStatus = "verified" | "pending" | "failed";
-export type WalletStatus = "none" | "active" | "frozen" | "pending";
+export type WalletStatus = "none" | "active" | "frozen" | "closed";
 export type AccountType = "chat_only" | "chat_banking";
 
-export type OnboardingStatus = "in_progress" | "complete";
-export type OnboardingStep =
-  | "profile_details"
-  | "phone_verification"
-  | "kyc_verification"
-  | "wallet_setup";
+export interface UserRecord {
+  id: string;
+  fullName: string | null;
+  username: string;
+  email: string | null;
+  phone: string;
+  country: string;
+  avatarUrl: string | null;
+  accountType: AccountType;
+  verification: VerificationStatus;
+  wallet: WalletStatus;
+  status: UserAccountStatus;
+  joinedAt: string;
+  lastActiveAt: string | null;
+}
 
-export type KycVerificationMethod = "face" | "record";
-export type KycResult = "passed" | "failed" | "pending";
+export interface UsersListPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
 
-// bvnLast4 is the only BVN fragment ever carried by this type — the full
-// number must never be modeled or transmitted, in mocks or the real API.
-export interface KycDetail {
-  method: KycVerificationMethod;
-  result: KycResult;
-  verifiedAt: string;
-  bvnLast4: string;
+export interface RecentSearchUser {
+  id: string;
+  fullName: string | null;
+  username: string;
+  avatarUrl: string | null;
+}
+
+export interface RecentSearches {
+  terms: string[];
+  users: RecentSearchUser[];
 }
 
 export type SuspensionReason =
@@ -41,32 +63,46 @@ export interface AuditEntry {
   createdAt: string;
 }
 
-export interface AppUser {
-  id: string;
-  userCode: string;
-  fullName: string;
-  username: string;
-  email: string | null;
-  phone: string;
-  dateOfBirth: string | null;
-  country: string;
-  avatarColor: string;
-  accountType: AccountType;
-  verification: VerificationStatus;
-  walletStatus: WalletStatus;
-  status: UserAccountStatus;
-  onboardingStatus: OnboardingStatus;
-  onboardingStep: OnboardingStep | null;
-  kyc: KycDetail | null;
-  createdAt: string;
-  lastActiveAt: string;
-}
-
 export interface CaseNote {
   id: string;
-  userId: string;
-  authorId: string;
-  authorName: string;
+  category: string;
   body: string;
+  authorFullName: string;
+  createdAt: string;
+}
+
+export interface VerificationCheck {
+  type: string;
+  status: string;
+  provider: string | null;
+  submittedAt: string | null;
+  approvedAt: string | null;
+  failedAttempts: number;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  maskedValue: string | null;
+}
+
+/** Shape of `GET /admin/users/:userId/verification`. */
+export interface VerificationDetail {
+  kycLevel: string;
+  checksPassed: number;
+  checksTotal: number;
+  outstandingChecks: string[];
+  checks: VerificationCheck[];
+}
+
+/** Shape of an item from `GET /admin/users/:userId/actions`. `actionType`,
+ * `previousStatus`, and `newStatus` are kept as open strings for the same
+ * forward-compat reason as VerificationCheck above. */
+export interface UserActionHistoryEntry {
+  id: string;
+  adminId: string;
+  actionType: string;
+  reason: string | null;
+  note: string | null;
+  previousStatus: string;
+  newStatus: string;
   createdAt: string;
 }

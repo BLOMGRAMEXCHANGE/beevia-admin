@@ -3,11 +3,13 @@ import type { AdminAccountStatus } from "@/types/admin";
 
 const LABEL: Record<AdminAccountStatus, string> = {
   active: "Active",
+  invited: "Invited",
   inactive: "Inactive",
 };
 
 const TONE: Record<AdminAccountStatus, StatusTone> = {
   active: "green",
+  invited: "amber",
   inactive: "red",
 };
 

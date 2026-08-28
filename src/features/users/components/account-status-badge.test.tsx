@@ -7,4 +7,9 @@ describe("AccountStatusBadge", () => {
     render(<AccountStatusBadge status="suspended" />);
     expect(screen.getByText("Suspended")).toBeInTheDocument();
   });
+
+  test("renders the deleting state with a progress indicator", () => {
+    render(<AccountStatusBadge status="deleting" />);
+    expect(screen.getByText("Deleting")).toBeInTheDocument();
+  });
 });

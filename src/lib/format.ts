@@ -6,6 +6,13 @@ export function formatDate(iso: string): string {
   });
 }
 
+const nairaFormat = new Intl.NumberFormat("en-NG");
+
+/** Formats an amount (in naira) as e.g. "₦4,820,000". */
+export function formatNaira(amount: number): string {
+  return `₦${nairaFormat.format(amount)}`;
+}
+
 export function formatRelativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const minutes = Math.round(diffMs / 60_000);
@@ -19,4 +26,14 @@ export function formatRelativeTime(iso: string): string {
   if (days < 30) return `${days} days ago`;
 
   return formatDate(iso);
+}
+
+/** Turns an open backend string (e.g. "not_started") into a readable label
+ * (e.g. "Not started") for values that don't have a dedicated label map. */
+export function humanizeToken(value: string): string {
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(" ");
 }

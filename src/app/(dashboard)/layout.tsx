@@ -91,9 +91,9 @@ export default function DashboardLayout({
   const firstName = admin?.name?.split(" ")[0];
 
   return (
-    <div className="flex min-h-svh flex-1">
-      <aside className="flex w-60 shrink-0 flex-col border-r bg-card px-3 py-4">
-        <div className="mb-6 flex items-center gap-2 px-1">
+    <div className="flex h-dvh w-full overflow-hidden">
+      <aside className="flex h-full w-60 shrink-0 flex-col overflow-hidden border-r bg-card py-4">
+        <div className="mb-6 flex shrink-0 items-center gap-2 px-4">
           <Image
             src={logo}
             alt="Beevia"
@@ -103,7 +103,7 @@ export default function DashboardLayout({
           />
           <span className="font-heading text-lg font-bold">Beevia</span>
         </div>
-        <nav className="flex flex-1 flex-col gap-1">
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3">
           {NAV_ITEMS.map((item) => {
             const active =
               pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -119,7 +119,7 @@ export default function DashboardLayout({
             );
           })}
         </nav>
-        <div className="mt-2 border-t pt-2">
+        <div className="mt-2 shrink-0 border-t px-3 pt-2">
           <NavLink
             item={{
               href: "/settings",
@@ -130,7 +130,7 @@ export default function DashboardLayout({
           />
         </div>
       </aside>
-      <div className="flex flex-1 flex-col">
+      <div className="flex h-full flex-1 flex-col overflow-hidden">
         <header className="flex h-16 shrink-0 items-center gap-4 border-b bg-white px-6">
           <p className="shrink-0 text-sm text-muted-foreground">
             {greeting}
@@ -150,7 +150,9 @@ export default function DashboardLayout({
             <AccountMenu />
           </div>
         </header>
-        <main className="flex-1 bg-muted/20 p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto bg-muted/20 p-6">
+          {children}
+        </main>
       </div>
     </div>
   );

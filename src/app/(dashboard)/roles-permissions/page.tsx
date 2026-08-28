@@ -1,5 +1,5 @@
 import { RoleGate } from "@/components/shared/role-gate";
-import { PlaceholderPage } from "@/components/shared/placeholder-page";
+import { RolesTable } from "@/features/roles/components/roles-table";
 
 export default function RolesPermissionsPage() {
   return (
@@ -11,10 +11,7 @@ export default function RolesPermissionsPage() {
         </p>
       }
     >
-      <PlaceholderPage
-        title="Roles & Permissions"
-        description="Roles & permission management"
-      />
+      <RolesTable />
     </RoleGate>
   );
 }

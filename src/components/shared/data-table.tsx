@@ -18,6 +18,7 @@ interface DataTableProps<T> {
   data: T[];
   getRowId: (row: T) => string;
   emptyMessage?: string;
+  onRowClick?: (row: T) => void;
 }
 
 export function DataTable<T>({
@@ -25,6 +26,7 @@ export function DataTable<T>({
   data,
   getRowId,
   emptyMessage = "No results.",
+  onRowClick,
 }: DataTableProps<T>) {
   return (
     <Table>
@@ -49,7 +51,11 @@ export function DataTable<T>({
           </TableRow>
         ) : (
           data.map((row) => (
-            <TableRow key={getRowId(row)}>
+            <TableRow
+              key={getRowId(row)}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              className={onRowClick ? "cursor-pointer" : undefined}
+            >
               {columns.map((column) => (
                 <TableCell key={column.header} className={column.className}>
                   {column.cell(row)}

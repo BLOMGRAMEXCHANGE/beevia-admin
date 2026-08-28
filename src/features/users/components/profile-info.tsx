@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDate } from "@/lib/format";
-import type { AppUser } from "@/types/user";
+import { countryName } from "@/features/users/countries";
+import type { UserRecord } from "@/types/user";
 
 function Field({ label, value }: { label: string; value: string | null }) {
   return (
@@ -13,7 +13,7 @@ function Field({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-export function ProfileInfo({ user }: { user: AppUser }) {
+export function ProfileInfo({ user }: { user: UserRecord }) {
   return (
     <Card>
       <CardHeader>
@@ -26,11 +26,7 @@ export function ProfileInfo({ user }: { user: AppUser }) {
         <Field label="Username" value={user.username} />
         <Field label="Phone number" value={user.phone} />
         <Field label="Email address" value={user.email} />
-        <Field
-          label="Date of birth"
-          value={user.dateOfBirth ? formatDate(user.dateOfBirth) : null}
-        />
-        <Field label="Country" value={user.country} />
+        <Field label="Country" value={countryName(user.country)} />
       </CardContent>
     </Card>
   );

@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Loader2Icon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -13,95 +15,173 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DataTable,
   type DataTableColumn,
 } from "@/components/shared/data-table";
+import { PaginationControls } from "@/components/shared/pagination-controls";
 import {
+  AdminAccountApiError,
   useAdminAccounts,
-  useUpdateAdminRole,
 } from "@/features/admin-accounts/api";
 import { AccessLevelBadge } from "@/features/admin-accounts/components/access-level-badge";
 import { AdminStatusBadge } from "@/features/admin-accounts/components/admin-status-badge";
 import { DeactivateReactivateButton } from "@/features/admin-accounts/components/deactivate-reactivate-button";
 import { InviteAdminDialog } from "@/features/admin-accounts/components/invite-admin-dialog";
-import { ROLE_LABEL } from "@/lib/roles";
+import {
+  RoleApiError,
+  useAssignAdminsToRole,
+  useRoles,
+} from "@/features/roles/api";
 import { formatRelativeTime } from "@/lib/format";
-import type {
-  AdminAccessLevel,
-  AdminAccount,
-  AdminAccountStatus,
-  AdminRole,
-} from "@/types/admin";
+import type { AdminAccount } from "@/types/admin";
 
-type FilterValue<T extends string> = T | "all";
+const PAGE_LIMIT = 10;
+const ROLE_SELECT_LIMIT = 100;
 
-const ACCESS_LEVEL_OPTIONS: { value: AdminAccessLevel; label: string }[] = [
-  { value: "full", label: "Full" },
-  { value: "limited", label: "Limited" },
-  { value: "read_only", label: "Read Only" },
-];
+function RoleCell({ account }: { account: AdminAccount }) {
+  const [pendingRole, setPendingRole] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [forbiddenError, setForbiddenError] = useState<string | null>(null);
 
-const STATUS_OPTIONS: { value: AdminAccountStatus; label: string }[] = [
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
-];
+  const { data: rolesData, isLoading: isLoadingRoles } = useRoles(
+    1,
+    ROLE_SELECT_LIMIT
+  );
+  const { mutate, isPending } = useAssignAdminsToRole();
 
-function labelFor<T extends string>(
-  options: { value: T; label: string }[],
-  value: T
-): string {
-  return options.find((option) => option.value === value)?.label ?? value;
-}
+  function handleValueChange(value: string | null) {
+    if (!value || value === account.roleId) return;
+    const role = rolesData?.roles.find((candidate) => candidate.id === value);
+    if (!role) return;
+    setForbiddenError(null);
+    setPendingRole({ id: role.id, name: role.name });
+  }
 
-function RoleSelect({ account }: { account: AdminAccount }) {
-  const { mutate, isPending } = useUpdateAdminRole();
+  function handleCancel() {
+    if (isPending) return;
+    setPendingRole(null);
+  }
+
+  function handleConfirm() {
+    if (!pendingRole) return;
+    mutate(
+      { roleId: pendingRole.id, adminIds: [account.id] },
+      {
+        onSuccess: () => {
+          toast.success(
+            `${account.fullName}'s role changed to ${pendingRole.name}`
+          );
+          setPendingRole(null);
+        },
+        onError: (mutationError) => {
+          if (
+            mutationError instanceof RoleApiError &&
+            mutationError.status === 403
+          ) {
+            setForbiddenError(
+              mutationError.message ||
+                "You do not have permission to perform this action."
+            );
+          } else {
+            toast.error(
+              mutationError instanceof RoleApiError
+                ? mutationError.message
+                : "Something went wrong. Please try again."
+            );
+          }
+          setPendingRole(null);
+        },
+      }
+    );
+  }
 
   return (
-    <Select
-      value={account.role}
-      disabled={isPending}
-      onValueChange={(value) =>
-        value && mutate({ id: account.id, role: value as AdminRole })
-      }
-    >
-      <SelectTrigger size="sm" className="w-40">
-        <SelectValue>{ROLE_LABEL[account.role]}</SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {Object.entries(ROLE_LABEL).map(([role, label]) => (
-          <SelectItem key={role} value={role}>
-            {label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <Select
+          value={pendingRole ? pendingRole.id : account.roleId}
+          onValueChange={handleValueChange}
+          disabled={isLoadingRoles || isPending}
+        >
+          <SelectTrigger size="sm" className="w-40">
+            <SelectValue>
+              {pendingRole ? pendingRole.name : account.roleName}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {(rolesData?.roles ?? []).map((role) => (
+              <SelectItem key={role.id} value={role.id}>
+                {role.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {isPending && (
+          <Loader2Icon className="size-3.5 animate-spin text-muted-foreground" />
+        )}
+      </div>
+      {forbiddenError && (
+        <p className="text-xs text-destructive">{forbiddenError}</p>
+      )}
+
+      <Dialog
+        open={Boolean(pendingRole)}
+        onOpenChange={(open) => !open && handleCancel()}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-bold">Change role</DialogTitle>
+            <DialogDescription>
+              Change {account.fullName}&apos;s role to {pendingRole?.name}?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose
+              render={
+                <Button type="button" variant="outline" disabled={isPending} />
+              }
+              onClick={handleCancel}
+            >
+              Cancel
+            </DialogClose>
+            <Button onClick={handleConfirm} disabled={isPending}>
+              {isPending ? "Changing…" : "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
+function initials(fullName: string): string {
+  return fullName
+    .split(" ")
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 export function AdminAccountsTable() {
-  const { data: accounts, isLoading } = useAdminAccounts();
-
-  const [search, setSearch] = useState("");
-  const [accessLevel, setAccessLevel] =
-    useState<FilterValue<AdminAccessLevel>>("all");
-  const [status, setStatus] = useState<FilterValue<AdminAccountStatus>>("all");
-
-  const filteredAccounts = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return (accounts ?? []).filter((account) => {
-      if (query) {
-        const haystack =
-          `${account.name} ${account.username} ${ROLE_LABEL[account.role]}`.toLowerCase();
-        if (!haystack.includes(query)) return false;
-      }
-      if (accessLevel !== "all" && account.accessLevel !== accessLevel)
-        return false;
-      if (status !== "all" && account.status !== status) return false;
-      return true;
-    });
-  }, [accounts, search, accessLevel, status]);
+  const [page, setPage] = useState(1);
+  const { data, isLoading, isError, error } = useAdminAccounts(
+    page,
+    PAGE_LIMIT
+  );
 
   const columns: DataTableColumn<AdminAccount>[] = [
     {
@@ -109,16 +189,13 @@ export function AdminAccountsTable() {
       cell: (account) => (
         <div className="flex items-center gap-2.5">
           <Avatar className="size-8">
-            <AvatarFallback className={`${account.avatarColor} text-white`}>
-              {account.name
-                .split(" ")
-                .map((part) => part[0])
-                .slice(0, 2)
-                .join("")}
-            </AvatarFallback>
+            {account.avatarUrl && (
+              <AvatarImage src={account.avatarUrl} alt="" />
+            )}
+            <AvatarFallback>{initials(account.fullName)}</AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
-            <span className="font-medium">{account.name}</span>
+            <span className="font-medium">{account.fullName}</span>
             <span className="text-xs text-muted-foreground">
               {account.username}
             </span>
@@ -126,7 +203,8 @@ export function AdminAccountsTable() {
         </div>
       ),
     },
-    { header: "Role", cell: (account) => <RoleSelect account={account} /> },
+    { header: "Email", cell: (account) => account.email },
+    { header: "Role", cell: (account) => <RoleCell account={account} /> },
     {
       header: "Access Level",
       cell: (account) => <AccessLevelBadge level={account.accessLevel} />,
@@ -142,9 +220,17 @@ export function AdminAccountsTable() {
     {
       header: "Action",
       className: "text-right",
-      cell: (account) => <DeactivateReactivateButton account={account} />,
+      cell: (account) =>
+        account.status === "invited" ? (
+          <span className="text-xs text-muted-foreground">Pending invite</span>
+        ) : (
+          <DeactivateReactivateButton account={account} />
+        ),
     },
   ];
+
+  const isForbidden =
+    isError && error instanceof AdminAccountApiError && error.status === 403;
 
   return (
     <div className="flex flex-col gap-6">
@@ -158,83 +244,38 @@ export function AdminAccountsTable() {
       <Card>
         <CardHeader className="flex-row items-center gap-2 space-y-0">
           <CardTitle className="font-heading text-base">Admins</CardTitle>
-          <Badge variant="secondary">{(accounts ?? []).length}</Badge>
+          {data && <Badge variant="secondary">{data.meta.total}</Badge>}
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-56 flex-1">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search role…"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="pl-8"
-              />
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Select
-                value={accessLevel}
-                onValueChange={(value) =>
-                  setAccessLevel(
-                    (value as FilterValue<AdminAccessLevel>) ?? "all"
-                  )
-                }
-              >
-                <SelectTrigger size="sm">
-                  <SelectValue>
-                    {accessLevel === "all"
-                      ? "Access Level"
-                      : labelFor(ACCESS_LEVEL_OPTIONS, accessLevel)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All access levels</SelectItem>
-                  {ACCESS_LEVEL_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={status}
-                onValueChange={(value) =>
-                  setStatus((value as FilterValue<AdminAccountStatus>) ?? "all")
-                }
-              >
-                <SelectTrigger size="sm">
-                  <SelectValue>
-                    {status === "all"
-                      ? "Status"
-                      : labelFor(STATUS_OPTIONS, status)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  {STATUS_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
           {isLoading ? (
             <div className="flex flex-col gap-2">
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-full" />
             </div>
+          ) : isForbidden ? (
+            <p className="text-sm text-muted-foreground">
+              {(error as AdminAccountApiError).message ||
+                "You do not have permission to view admin accounts."}
+            </p>
+          ) : isError ? (
+            <p className="text-sm text-muted-foreground">
+              Something went wrong loading admin accounts. Please try again.
+            </p>
           ) : (
-            <DataTable
-              columns={columns}
-              data={filteredAccounts}
-              getRowId={(account) => account.id}
-              emptyMessage="No admin accounts match these filters."
-            />
+            <>
+              <DataTable
+                columns={columns}
+                data={data?.accounts ?? []}
+                getRowId={(account) => account.id}
+                emptyMessage="No admin accounts found."
+              />
+              <PaginationControls
+                page={data?.meta.currentPage ?? page}
+                pageCount={data?.meta.totalPages ?? 1}
+                onPageChange={setPage}
+              />
+            </>
           )}
         </CardContent>
       </Card>

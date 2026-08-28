@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
-import { CalendarDays, Download, MoreHorizontal, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { CalendarDays, Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -15,12 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DataTable,
@@ -30,14 +25,21 @@ import { PaginationControls } from "@/components/shared/pagination-controls";
 import { AccountStatusBadge } from "@/features/users/components/account-status-badge";
 import { VerificationBadge } from "@/features/users/components/verification-badge";
 import { WalletStatusBadge } from "@/features/users/components/wallet-status-badge";
+import { SearchField } from "@/features/users/components/search-field";
 import { ACCOUNT_TYPE_LABEL } from "@/features/users/account-type";
-import { useUsers } from "@/features/users/api";
+import { COUNTRIES, countryName } from "@/features/users/countries";
+import {
+  UserApiError,
+  useExportUsers,
+  useRecordSearch,
+  useUsersList,
+  type UsersFilters,
+} from "@/features/users/api";
 import { formatDate, formatRelativeTime } from "@/lib/format";
-import { downloadCsv } from "@/lib/csv";
 import type {
   AccountType,
-  AppUser,
   UserAccountStatus,
+  UserRecord,
   VerificationStatus,
   WalletStatus,
 } from "@/types/user";
@@ -53,6 +55,9 @@ const ACCOUNT_STATUS_OPTIONS: { value: UserAccountStatus; label: string }[] = [
   { value: "active", label: "Active" },
   { value: "restricted", label: "Restricted" },
   { value: "suspended", label: "Suspended" },
+  { value: "deactivated", label: "Deactivated" },
+  { value: "deleting", label: "Deleting" },
+  { value: "deleted", label: "Deleted" },
 ];
 
 const VERIFICATION_OPTIONS: { value: VerificationStatus; label: string }[] = [
@@ -65,17 +70,8 @@ const WALLET_OPTIONS: { value: WalletStatus; label: string }[] = [
   { value: "none", label: "None" },
   { value: "active", label: "Active" },
   { value: "frozen", label: "Frozen" },
-  { value: "pending", label: "Pending" },
+  { value: "closed", label: "Closed" },
 ];
-
-const DATE_RANGE_OPTIONS = [
-  { value: "all", label: "All time" },
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
-  { value: "this_month", label: "This month" },
-] as const;
-
-type DateRange = (typeof DATE_RANGE_OPTIONS)[number]["value"];
 
 function labelFor<T extends string>(
   options: { value: T; label: string }[],
@@ -84,134 +80,175 @@ function labelFor<T extends string>(
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
-const PAGE_SIZE = 10;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function matchesDateRange(createdAt: string, range: DateRange): boolean {
-  if (range === "all") return true;
-  const joined = new Date(createdAt);
-  const now = new Date();
-
-  if (range === "7d") return now.getTime() - joined.getTime() <= 7 * DAY_MS;
-  if (range === "30d") return now.getTime() - joined.getTime() <= 30 * DAY_MS;
-  // this_month
-  return (
-    joined.getFullYear() === now.getFullYear() &&
-    joined.getMonth() === now.getMonth()
-  );
+function initials(fullName: string | null | undefined): string {
+  if (!fullName) return "?";
+  return fullName
+    .split(" ")
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 }
 
-export function UsersTable() {
-  const { data: users, isLoading } = useUsers();
+function toDateInputValue(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
 
-  const [search, setSearch] = useState("");
+const PAGE_LIMIT = 20;
+
+export function UsersTable() {
+  const router = useRouter();
+
+  const [rawSearch, setRawSearch] = useState("");
+  const [committedSearch, setCommittedSearch] = useState("");
   const [country, setCountry] = useState<FilterValue<string>>("all");
   const [accountType, setAccountType] =
     useState<FilterValue<AccountType>>("all");
-  const [status, setStatus] = useState<FilterValue<UserAccountStatus>>("all");
+  const [accountStatus, setAccountStatus] =
+    useState<FilterValue<UserAccountStatus>>("all");
   const [verification, setVerification] =
     useState<FilterValue<VerificationStatus>>("all");
-  const [walletStatus, setWalletStatus] =
-    useState<FilterValue<WalletStatus>>("all");
-  const [dateRange, setDateRange] = useState<DateRange>("all");
+  const [wallet, setWallet] = useState<FilterValue<WalletStatus>>("all");
+  const [joinedFrom, setJoinedFrom] = useState("");
+  const [joinedTo, setJoinedTo] = useState("");
   const [page, setPage] = useState(1);
 
-  const countries = useMemo(
-    () => Array.from(new Set((users ?? []).map((user) => user.country))).sort(),
-    [users]
-  );
+  const { mutate: recordSearch } = useRecordSearch();
+  const lastRecordedTermRef = useRef("");
 
-  const filteredUsers = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return (users ?? []).filter((user) => {
-      if (query) {
-        const haystack =
-          `${user.fullName} ${user.username} ${user.email ?? ""}`.toLowerCase();
-        if (!haystack.includes(query)) return false;
-      }
-      if (country !== "all" && user.country !== country) return false;
-      if (accountType !== "all" && user.accountType !== accountType)
-        return false;
-      if (status !== "all" && user.status !== status) return false;
-      if (verification !== "all" && user.verification !== verification)
-        return false;
-      if (walletStatus !== "all" && user.walletStatus !== walletStatus)
-        return false;
-      if (!matchesDateRange(user.createdAt, dateRange)) return false;
-      return true;
-    });
-  }, [
-    users,
-    search,
-    country,
-    accountType,
-    status,
-    verification,
-    walletStatus,
-    dateRange,
-  ]);
+  function commitSearch(term: string) {
+    const trimmed = term.trim();
+    setCommittedSearch(trimmed);
+    setPage(1);
+    if (trimmed && trimmed !== lastRecordedTermRef.current) {
+      lastRecordedTermRef.current = trimmed;
+      recordSearch(trimmed);
+    }
+  }
 
-  const pageCount = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const pageStart = (currentPage - 1) * PAGE_SIZE;
-  const pagedUsers = filteredUsers.slice(pageStart, pageStart + PAGE_SIZE);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function updateFilter<T extends string>(
-    setter: (value: T) => void,
-    fallback: T
-  ) {
+  function handleSearchChange(value: string) {
+    setRawSearch(value);
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => commitSearch(value), 500);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, []);
+
+  function handleSearchCommit(term: string) {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    commitSearch(term);
+  }
+
+  function updateFilter<T extends string>(setter: (value: T) => void) {
     return (value: T | null) => {
-      setter(value ?? fallback);
+      setter((value ?? "all") as T);
       setPage(1);
     };
   }
 
-  function handleExport() {
-    downloadCsv(
-      "beevia-users.csv",
-      filteredUsers.map((user) => ({
-        userCode: user.userCode,
-        fullName: user.fullName,
-        username: user.username,
-        email: user.email ?? "",
-        phone: user.phone,
-        country: user.country,
-        accountType: ACCOUNT_TYPE_LABEL[user.accountType],
-        verification: user.verification,
-        walletStatus: user.walletStatus,
-        status: user.status,
-        joined: formatDate(user.createdAt),
-      }))
+  function setThisMonthPreset() {
+    const now = new Date();
+    setJoinedFrom(
+      toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1))
     );
+    setJoinedTo(
+      toDateInputValue(new Date(now.getFullYear(), now.getMonth() + 1, 0))
+    );
+    setPage(1);
   }
 
-  const columns: DataTableColumn<AppUser>[] = [
+  const hasActiveFilters =
+    Boolean(committedSearch) ||
+    country !== "all" ||
+    accountType !== "all" ||
+    accountStatus !== "all" ||
+    verification !== "all" ||
+    wallet !== "all" ||
+    Boolean(joinedFrom) ||
+    Boolean(joinedTo);
+
+  function clearFilters() {
+    setRawSearch("");
+    setCommittedSearch("");
+    setCountry("all");
+    setAccountType("all");
+    setAccountStatus("all");
+    setVerification("all");
+    setWallet("all");
+    setJoinedFrom("");
+    setJoinedTo("");
+    setPage(1);
+  }
+
+  const filters: UsersFilters = useMemo(
+    () => ({
+      search: committedSearch || undefined,
+      country: country === "all" ? undefined : country,
+      accountType: accountType === "all" ? undefined : accountType,
+      accountStatus: accountStatus === "all" ? undefined : accountStatus,
+      verification: verification === "all" ? undefined : verification,
+      wallet: wallet === "all" ? undefined : wallet,
+      joinedFrom: joinedFrom || undefined,
+      joinedTo: joinedTo || undefined,
+    }),
+    [
+      committedSearch,
+      country,
+      accountType,
+      accountStatus,
+      verification,
+      wallet,
+      joinedFrom,
+      joinedTo,
+    ]
+  );
+
+  const { data, isLoading, isError, error } = useUsersList(
+    filters,
+    page,
+    PAGE_LIMIT
+  );
+  const { mutate: exportUsers, isPending: isExporting } = useExportUsers();
+
+  function handleExport() {
+    exportUsers(filters, {
+      onError: (mutationError) => {
+        toast.error(
+          mutationError instanceof UserApiError
+            ? mutationError.message
+            : "Something went wrong exporting users. Please try again."
+        );
+      },
+    });
+  }
+
+  const columns: DataTableColumn<UserRecord>[] = [
     {
       header: "Name & Username",
       cell: (user) => (
-        <Link
-          href={`/users/${user.id}`}
-          className="flex items-center gap-2.5 hover:underline"
-        >
+        <div className="flex items-center gap-2.5">
           <Avatar className="size-8">
-            <AvatarFallback className={`${user.avatarColor} text-white`}>
-              {user.fullName
-                .split(" ")
-                .map((part) => part[0])
-                .slice(0, 2)
-                .join("")}
-            </AvatarFallback>
+            {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
+            <AvatarFallback>{initials(user.fullName)}</AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
-            <span className="font-medium">{user.fullName}</span>
+            <span className="font-medium">
+              {user.fullName || "Unnamed user"}
+            </span>
             <span className="text-xs text-muted-foreground">
               {user.username}
             </span>
           </div>
-        </Link>
+        </div>
       ),
     },
-    { header: "User ID", cell: (user) => user.userCode },
     {
       header: "Contact",
       cell: (user) => (
@@ -221,6 +258,7 @@ export function UsersTable() {
         </div>
       ),
     },
+    { header: "Country", cell: (user) => countryName(user.country) },
     {
       header: "Account Type",
       cell: (user) => ACCOUNT_TYPE_LABEL[user.accountType],
@@ -231,37 +269,22 @@ export function UsersTable() {
     },
     {
       header: "Wallet",
-      cell: (user) => <WalletStatusBadge status={user.walletStatus} />,
+      cell: (user) => <WalletStatusBadge status={user.wallet} />,
     },
     {
       header: "Account Status",
       cell: (user) => <AccountStatusBadge status={user.status} />,
     },
-    { header: "Joined", cell: (user) => formatDate(user.createdAt) },
+    { header: "Joined", cell: (user) => formatDate(user.joinedAt) },
     {
       header: "Last Active",
-      cell: (user) => formatRelativeTime(user.lastActiveAt),
-    },
-    {
-      header: "Action",
-      className: "text-right",
-      cell: (user) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<Button variant="ghost" size="icon-sm" />}
-          >
-            <MoreHorizontal className="size-4" />
-            <span className="sr-only">Actions</span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem render={<Link href={`/users/${user.id}`} />}>
-              View account
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
+      cell: (user) =>
+        user.lastActiveAt ? formatRelativeTime(user.lastActiveAt) : "Never",
     },
   ];
+
+  const isForbidden =
+    isError && error instanceof UserApiError && error.status === 403;
 
   return (
     <div className="flex flex-col gap-6">
@@ -269,51 +292,39 @@ export function UsersTable() {
         <h1 className="font-heading text-2xl font-bold tracking-tight">
           Users
         </h1>
-        <Button onClick={handleExport} disabled={filteredUsers.length === 0}>
+        <Button onClick={handleExport} disabled={isExporting}>
           <Download data-icon="inline-start" />
-          Export
+          {isExporting ? "Exporting…" : "Export"}
         </Button>
       </div>
 
       <Card>
         <CardHeader className="flex-row items-center gap-2 space-y-0">
           <CardTitle className="font-heading text-base">Users</CardTitle>
-          <Badge variant="secondary">
-            {(users ?? []).length.toLocaleString()}
-          </Badge>
+          {data && <Badge variant="secondary">{data.pagination.total}</Badge>}
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-56 flex-1">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by name, username…"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setPage(1);
-                }}
-                className="pl-8"
-              />
-            </div>
+            <SearchField
+              value={rawSearch}
+              onChange={handleSearchChange}
+              onCommit={handleSearchCommit}
+            />
 
             <Select
               value={country}
-              onValueChange={updateFilter<FilterValue<string>>(
-                setCountry,
-                "all"
-              )}
+              onValueChange={updateFilter<FilterValue<string>>(setCountry)}
             >
               <SelectTrigger size="sm">
                 <SelectValue>
-                  {country === "all" ? "Country" : country}
+                  {country === "all" ? "Country" : countryName(country)}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All countries</SelectItem>
-                {countries.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {value}
+                {COUNTRIES.map((option) => (
+                  <SelectItem key={option.code} value={option.code}>
+                    {option.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -322,8 +333,7 @@ export function UsersTable() {
             <Select
               value={accountType}
               onValueChange={updateFilter<FilterValue<AccountType>>(
-                setAccountType,
-                "all"
+                setAccountType
               )}
             >
               <SelectTrigger size="sm">
@@ -344,17 +354,16 @@ export function UsersTable() {
             </Select>
 
             <Select
-              value={status}
+              value={accountStatus}
               onValueChange={updateFilter<FilterValue<UserAccountStatus>>(
-                setStatus,
-                "all"
+                setAccountStatus
               )}
             >
               <SelectTrigger size="sm">
                 <SelectValue>
-                  {status === "all"
+                  {accountStatus === "all"
                     ? "Account Status"
-                    : labelFor(ACCOUNT_STATUS_OPTIONS, status)}
+                    : labelFor(ACCOUNT_STATUS_OPTIONS, accountStatus)}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -370,8 +379,7 @@ export function UsersTable() {
             <Select
               value={verification}
               onValueChange={updateFilter<FilterValue<VerificationStatus>>(
-                setVerification,
-                "all"
+                setVerification
               )}
             >
               <SelectTrigger size="sm">
@@ -392,17 +400,14 @@ export function UsersTable() {
             </Select>
 
             <Select
-              value={walletStatus}
-              onValueChange={updateFilter<FilterValue<WalletStatus>>(
-                setWalletStatus,
-                "all"
-              )}
+              value={wallet}
+              onValueChange={updateFilter<FilterValue<WalletStatus>>(setWallet)}
             >
               <SelectTrigger size="sm">
                 <SelectValue>
-                  {walletStatus === "all"
-                    ? "Wallet Status"
-                    : labelFor(WALLET_OPTIONS, walletStatus)}
+                  {wallet === "all"
+                    ? "Wallet"
+                    : labelFor(WALLET_OPTIONS, wallet)}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -415,28 +420,40 @@ export function UsersTable() {
               </SelectContent>
             </Select>
 
-            <Select
-              value={dateRange}
-              onValueChange={updateFilter<DateRange>(setDateRange, "all")}
-            >
-              <SelectTrigger size="sm">
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="date"
+                aria-label="Joined from"
+                value={joinedFrom}
+                onChange={(event) => {
+                  setJoinedFrom(event.target.value);
+                  setPage(1);
+                }}
+                className="w-36"
+              />
+              <span className="text-sm text-muted-foreground">to</span>
+              <Input
+                type="date"
+                aria-label="Joined to"
+                value={joinedTo}
+                onChange={(event) => {
+                  setJoinedTo(event.target.value);
+                  setPage(1);
+                }}
+                className="w-36"
+              />
+              <Button variant="outline" size="sm" onClick={setThisMonthPreset}>
                 <CalendarDays data-icon="inline-start" className="size-4" />
-                <SelectValue>
-                  {
-                    DATE_RANGE_OPTIONS.find(
-                      (option) => option.value === dateRange
-                    )?.label
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {DATE_RANGE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                This month
+              </Button>
+            </div>
+
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                <X data-icon="inline-start" className="size-4" />
+                Clear filters
+              </Button>
+            )}
           </div>
 
           {isLoading ? (
@@ -445,20 +462,31 @@ export function UsersTable() {
                 <Skeleton key={i} className="h-10 w-full" />
               ))}
             </div>
+          ) : isForbidden ? (
+            <p className="text-sm text-muted-foreground">
+              {(error as UserApiError).message ||
+                "You do not have permission to view users."}
+            </p>
+          ) : isError ? (
+            <p className="text-sm text-muted-foreground">
+              Something went wrong loading users. Please try again.
+            </p>
           ) : (
-            <DataTable
-              columns={columns}
-              data={pagedUsers}
-              getRowId={(user) => user.id}
-              emptyMessage="No users match these filters."
-            />
+            <>
+              <DataTable
+                columns={columns}
+                data={data?.users ?? []}
+                getRowId={(user) => user.id}
+                emptyMessage="No users match these filters."
+                onRowClick={(user) => router.push(`/users/${user.id}`)}
+              />
+              <PaginationControls
+                page={data?.pagination.page ?? page}
+                pageCount={data?.pagination.totalPages ?? 1}
+                onPageChange={setPage}
+              />
+            </>
           )}
-
-          <PaginationControls
-            page={currentPage}
-            pageCount={pageCount}
-            onPageChange={setPage}
-          />
         </CardContent>
       </Card>
     </div>

@@ -11,10 +11,16 @@ export interface FieldError {
 
 export class AuthApiError extends Error {
   fieldErrors: FieldError[];
+  status?: number;
 
-  constructor(message: string, fieldErrors: FieldError[] = []) {
+  constructor(
+    message: string,
+    fieldErrors: FieldError[] = [],
+    status?: number
+  ) {
     super(message);
     this.fieldErrors = fieldErrors;
+    this.status = status;
   }
 }
 
@@ -37,7 +43,11 @@ interface RoleResponseData {
 function toAuthApiError(error: unknown): AuthApiError {
   if (isAxiosError<{ message?: string; details?: FieldError[] }>(error)) {
     const message = error.response?.data?.message ?? "Something went wrong.";
-    return new AuthApiError(message, error.response?.data?.details ?? []);
+    return new AuthApiError(
+      message,
+      error.response?.data?.details ?? [],
+      error.response?.status
+    );
   }
   return new AuthApiError("Something went wrong.");
 }
@@ -57,6 +67,48 @@ export async function login(
     const { data } = await liveClient.post<{ data: LoginResponseData }>(
       "/admin/auth/login",
       { email, password }
+    );
+    const { access_token, admin } = data.data;
+
+    // Set the token before fetching the role so the request carries it.
+    setSession(
+      {
+        id: admin.id,
+        name: admin.full_name,
+        email: admin.email,
+        role: "support",
+        roleId: admin.role_id,
+      },
+      access_token
+    );
+
+    const role = await fetchRole(admin.role_id);
+    const currentAdmin: CurrentAdmin = {
+      id: admin.id,
+      name: admin.full_name,
+      email: admin.email,
+      role: mapAccessLevelToRole(role.access_level),
+      roleId: role.id,
+      roleName: role.name,
+      accessLevel: role.access_level,
+    };
+    setSession(currentAdmin, access_token);
+    return currentAdmin;
+  } catch (error) {
+    clearSession();
+    throw toAuthApiError(error);
+  }
+}
+
+export async function acceptInvite(
+  adminId: string,
+  token: string,
+  password: string
+): Promise<CurrentAdmin> {
+  try {
+    const { data } = await liveClient.post<{ data: LoginResponseData }>(
+      "/admin/auth/accept-invite",
+      { adminId, token, password }
     );
     const { access_token, admin } = data.data;
 

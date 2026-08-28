@@ -1,10 +1,5 @@
-import { PlaceholderPage } from "@/components/shared/placeholder-page";
+import { TransactionsTabs } from "@/features/transactions/components/transactions-tabs";
 
 export default function TransactionsPage() {
-  return (
-    <PlaceholderPage
-      title="Transactions"
-      description="Transaction monitoring"
-    />
-  );
+  return <TransactionsTabs />;
 }

@@ -64,16 +64,6 @@ export default function LoginPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {/* {USE_MOCKS && (
-          <div className="mb-4 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-            <p className="mb-1 font-medium text-foreground">
-              Preview mode — any password works
-            </p>
-            <p>support@beevia.dev — Support</p>
-            <p>compliance@beevia.dev — Compliance</p>
-            <p>admin@beevia.dev — Super Admin</p>
-          </div>
-        )} */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email">Work Email</Label>

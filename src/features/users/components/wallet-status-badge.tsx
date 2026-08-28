@@ -5,14 +5,14 @@ const LABEL: Record<WalletStatus, string> = {
   none: "None",
   active: "Active",
   frozen: "Frozen",
-  pending: "Pending",
+  closed: "Closed",
 };
 
 const TONE: Record<WalletStatus, StatusTone> = {
   none: "gray",
   active: "green",
   frozen: "blue",
-  pending: "amber",
+  closed: "red",
 };
 
 export function WalletStatusBadge({ status }: { status: WalletStatus }) {

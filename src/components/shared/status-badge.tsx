@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-export type StatusTone = "green" | "red" | "amber" | "gray" | "blue";
+export type StatusTone = "green" | "red" | "amber" | "gray" | "blue" | "slate";
 
 const TONE_CLASSES: Record<StatusTone, string> = {
   green:
@@ -10,6 +10,9 @@ const TONE_CLASSES: Record<StatusTone, string> = {
   amber: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
   gray: "bg-muted text-muted-foreground",
   blue: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400",
+  // Distinct from plain `gray` (used for the terminal deleting/deleted
+  // states) so a deactivated account doesn't read as "gone" the same way.
+  slate: "bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300",
 };
 
 export function StatusBadge({

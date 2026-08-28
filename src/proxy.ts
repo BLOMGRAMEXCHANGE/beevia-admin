@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { getAllowedRolesForPath } from "@/lib/roles";
 import type { AdminRole } from "@/types/admin";
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/accept-invite"];
 
 const SESSION_COOKIE = "admin_session";
 const ROLE_COOKIE = "admin_role";
