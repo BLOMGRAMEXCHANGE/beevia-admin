@@ -2,7 +2,7 @@ import axios, { type InternalAxiosRequestConfig } from "axios";
 import { clearSession, getAccessToken } from "@/lib/token-store";
 import { mockAdapter } from "@/mocks/adapter";
 
-const API_BASE_URL = process.env.API_BASE_URL ?? "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === "true";
 

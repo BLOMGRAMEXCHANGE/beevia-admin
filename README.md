@@ -51,11 +51,11 @@ couple of non-httpOnly cookies (`admin_session`, `admin_role`) purely so
 See `.env.example`. The first two are required for the app to talk to a real
 backend; the third is for local preview only (see above):
 
-| Variable                 | Purpose                                                       |
-| ------------------------ | ------------------------------------------------------------- |
-| `API_BASE_URL`           | Base URL of the separately-hosted backend API.                |
-| `NEXT_PUBLIC_SOCKET_URL` | Real-time transport endpoint (assumed Socket.IO — see below). |
-| `NEXT_PUBLIC_USE_MOCKS`  | `true` to serve fixture data instead of a real backend.       |
+| Variable                   | Purpose                                                       |
+| -------------------------- | ------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_BASE_URL` | Base URL of the separately-hosted backend API.                |
+| `NEXT_PUBLIC_SOCKET_URL`   | Real-time transport endpoint (assumed Socket.IO — see below). |
+| `NEXT_PUBLIC_USE_MOCKS`    | `true` to serve fixture data instead of a real backend.       |
 
 ## Folder structure
 
