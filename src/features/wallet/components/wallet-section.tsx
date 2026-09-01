@@ -268,7 +268,7 @@ export function WalletSection({ userId }: { userId: string }) {
     <Card>
       <CardHeader className="flex-row items-center gap-2 space-y-0">
         <CardTitle className="font-heading text-base">Wallet</CardTitle>
-        <Badge variant="secondary">Mock data</Badge>
+        {/* <Badge variant="secondary">Mock data</Badge> */}
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         <WalletBalance userId={userId} />
