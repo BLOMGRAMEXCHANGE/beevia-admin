@@ -38,7 +38,7 @@ interface AdminAccountData {
   };
   access_level: AdminAccessLevel;
   status: AdminAccountStatus;
-  last_active_at: string;
+  last_active_at: string | null;
 }
 
 function toAdminAccount(data: AdminAccountData): AdminAccount {
@@ -140,6 +140,28 @@ function toInviteAdminResult(data: InviteAdminResponseData): InviteAdminResult {
     status: data.status,
     lastLoginAt: data.last_login_at,
   };
+}
+
+/**
+ * Resends the invite email to an admin who hasn't accepted yet.
+ *
+ * There's no documented resend endpoint yet — `POST /admin/accounts/{id}/
+ * resend-invite` follows this codebase's existing convention (an action on a
+ * specific account posts to a sub-path of `/admin/accounts/{id}`, e.g. invite
+ * itself). Adjust the path if the backend documents a different one; the
+ * response is read leniently (no fields are required) since its shape isn't
+ * confirmed either.
+ */
+export function useResendAdminInvite() {
+  return useMutation({
+    mutationFn: async (adminId: string) => {
+      try {
+        await liveClient.post(`/admin/accounts/${adminId}/resend-invite`);
+      } catch (error) {
+        throw toAdminAccountApiError(error);
+      }
+    },
+  });
 }
 
 export function useInviteAdmin() {

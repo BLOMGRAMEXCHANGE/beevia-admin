@@ -37,6 +37,7 @@ import { AccessLevelBadge } from "@/features/admin-accounts/components/access-le
 import { AdminStatusBadge } from "@/features/admin-accounts/components/admin-status-badge";
 import { DeactivateReactivateButton } from "@/features/admin-accounts/components/deactivate-reactivate-button";
 import { InviteAdminDialog } from "@/features/admin-accounts/components/invite-admin-dialog";
+import { ResendInviteButton } from "@/features/admin-accounts/components/resend-invite-button";
 import {
   RoleApiError,
   useAssignAdminsToRole,
@@ -215,14 +216,22 @@ export function AdminAccountsTable() {
     },
     {
       header: "Last Active",
-      cell: (account) => formatRelativeTime(account.lastActiveAt),
+      cell: (account) =>
+        account.lastActiveAt
+          ? formatRelativeTime(account.lastActiveAt)
+          : "Never",
     },
     {
       header: "Action",
       className: "text-right",
       cell: (account) =>
         account.status === "invited" ? (
-          <span className="text-xs text-muted-foreground">Pending invite</span>
+          <div className="flex flex-col items-end gap-1">
+            <span className="text-xs text-muted-foreground">
+              Pending invite
+            </span>
+            <ResendInviteButton account={account} />
+          </div>
         ) : (
           <DeactivateReactivateButton account={account} />
         ),

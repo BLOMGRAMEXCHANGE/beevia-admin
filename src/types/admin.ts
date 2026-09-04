@@ -35,5 +35,6 @@ export interface AdminAccount {
   accessLevel: AdminAccessLevel;
   status: AdminAccountStatus;
 
-  lastActiveAt: string;
+  /** Null for an admin who hasn't accepted their invite yet (never logged in). */
+  lastActiveAt: string | null;
 }
