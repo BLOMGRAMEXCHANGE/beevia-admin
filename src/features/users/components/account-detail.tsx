@@ -2,10 +2,13 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RoleGate } from "@/components/shared/role-gate";
 import { UserApiError, useUserDetail } from "@/features/users/api";
 import { AccountHeader } from "@/features/users/components/account-header";
 import { ProfileInfo } from "@/features/users/components/profile-info";
 import { WalletSection } from "@/features/wallet/components/wallet-section";
+import { UserReconciliationCard } from "@/features/reconciliation/components/user-reconciliation-card";
+import { RECONCILIATION_ROLES } from "@/features/reconciliation/constants";
 import { UserStatusActions } from "@/features/users/components/user-status-actions";
 import { CaseNotes } from "@/features/users/components/case-notes";
 import { AuditTrail } from "@/features/users/components/audit-trail";
@@ -75,7 +78,16 @@ export function AccountDetail({ userId }: { userId: string }) {
 
       <ProfileInfo user={user} />
 
-      {user.accountType === "chat_banking" && <WalletSection userId={userId} />}
+      {user.accountType === "chat_banking" && (
+        <>
+          <WalletSection userId={userId} />
+          {/* Stricter gate than the rest of this page: reconciliation is a
+              financial-integrity function, not general account browsing. */}
+          <RoleGate allow={[...RECONCILIATION_ROLES]}>
+            <UserReconciliationCard userId={userId} />
+          </RoleGate>
+        </>
+      )}
 
       <VerificationDetailPanel userId={userId} />
 

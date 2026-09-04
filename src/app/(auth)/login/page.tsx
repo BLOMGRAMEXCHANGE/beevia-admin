@@ -43,7 +43,7 @@ export default function LoginPage() {
       document.cookie = `admin_session=1; path=/`;
       document.cookie = `admin_role=${admin.role}; path=/`;
       queryClient.setQueryData(["current-admin"], admin);
-      router.push("/users");
+      router.push("/dashboard");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Invalid email or password.";

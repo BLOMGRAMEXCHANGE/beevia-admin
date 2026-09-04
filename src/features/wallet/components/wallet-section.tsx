@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { ListFilter, X } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -22,17 +21,18 @@ import {
 import { PaginationControls } from "@/components/shared/pagination-controls";
 import { cn } from "@/lib/utils";
 import { formatNaira } from "@/lib/format";
+import { TRANSACTIONS_PAGE_LIMIT } from "@/features/wallet/constants";
+import { TRANSACTION_TYPE_OPTIONS } from "@/features/transactions/constants";
+import { TransactionStatusBadge } from "@/features/transactions/components/transaction-status-badge";
+import { TransactionTypeBadge } from "@/features/transactions/components/transaction-type-badge";
 import {
-  TRANSACTIONS_PAGE_LIMIT,
-  TRANSACTION_TYPE_OPTIONS,
-} from "@/features/wallet/constants";
-import { useWalletBalance, useWalletTransactions } from "@/features/wallet/api";
-import { TransactionStatusBadge } from "@/features/wallet/components/transaction-status-badge";
-import { TransactionTypeBadge } from "@/features/wallet/components/transaction-type-badge";
+  useWalletBalance,
+  useWalletTransactions,
+  WalletApiError,
+} from "@/features/wallet/api";
 import type {
-  WalletTransaction,
-  WalletTransactionFilters,
-  WalletTransactionType,
+  WalletLedgerFilters,
+  WalletLedgerTransaction,
 } from "@/features/wallet/types";
 
 function formatTimestamp(iso: string): string {
@@ -45,7 +45,11 @@ function formatTimestamp(iso: string): string {
   });
 }
 
-function SignedAmount({ transaction }: { transaction: WalletTransaction }) {
+function SignedAmount({
+  transaction,
+}: {
+  transaction: WalletLedgerTransaction;
+}) {
   const isCredit = transaction.direction === "credit";
   return (
     <span
@@ -81,15 +85,15 @@ function WalletBalance({ userId }: { userId: string }) {
   );
 }
 
-const EMPTY_TYPES: WalletTransactionType[] = [];
+const EMPTY_TYPES: string[] = [];
 
 function TransactionHistory({ userId }: { userId: string }) {
-  const [types, setTypes] = useState<WalletTransactionType[]>(EMPTY_TYPES);
+  const [types, setTypes] = useState<string[]>(EMPTY_TYPES);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
 
-  const filters: WalletTransactionFilters = useMemo(
+  const filters: WalletLedgerFilters = useMemo(
     () => ({
       types: types.length > 0 ? types : undefined,
       dateFrom: dateFrom || undefined,
@@ -98,12 +102,8 @@ function TransactionHistory({ userId }: { userId: string }) {
     [types, dateFrom, dateTo]
   );
 
-  const { data, isLoading, isError, isPlaceholderData } = useWalletTransactions(
-    userId,
-    filters,
-    page,
-    TRANSACTIONS_PAGE_LIMIT
-  );
+  const { data, isLoading, isError, error, isPlaceholderData } =
+    useWalletTransactions(userId, filters, page, TRANSACTIONS_PAGE_LIMIT);
 
   const hasActiveFilters =
     types.length > 0 || Boolean(dateFrom) || Boolean(dateTo);
@@ -112,7 +112,7 @@ function TransactionHistory({ userId }: { userId: string }) {
     setPage(1);
   }
 
-  function toggleType(value: WalletTransactionType, checked: boolean) {
+  function toggleType(value: string, checked: boolean) {
     setTypes((current) =>
       checked ? [...current, value] : current.filter((entry) => entry !== value)
     );
@@ -126,16 +126,26 @@ function TransactionHistory({ userId }: { userId: string }) {
     resetToFirstPage();
   }
 
-  const columns: DataTableColumn<WalletTransaction>[] = [
+  const columns: DataTableColumn<WalletLedgerTransaction>[] = [
     {
       header: "Type",
-      cell: (txn) => <TransactionTypeBadge type={txn.type} />,
+      cell: (txn) => (
+        <TransactionTypeBadge type={txn.type} direction={txn.direction} />
+      ),
     },
     {
       header: "Amount",
       cell: (txn) => <SignedAmount transaction={txn} />,
     },
-    { header: "Counterparty", cell: (txn) => txn.counterparty },
+    {
+      header: "Description",
+      cell: (txn) => (
+        <div className="flex flex-col">
+          <span>{txn.description || "—"}</span>
+          <span className="text-xs text-muted-foreground">{txn.reference}</span>
+        </div>
+      ),
+    },
     {
       header: "Status",
       cell: (txn) => <TransactionStatusBadge status={txn.status} />,
@@ -233,7 +243,9 @@ function TransactionHistory({ userId }: { userId: string }) {
         </div>
       ) : isError ? (
         <p className="text-sm text-muted-foreground">
-          Something went wrong loading transactions. Please try again.
+          {error instanceof WalletApiError
+            ? error.message
+            : "Something went wrong loading transactions. Please try again."}
         </p>
       ) : (
         <div
@@ -268,7 +280,6 @@ export function WalletSection({ userId }: { userId: string }) {
     <Card>
       <CardHeader className="flex-row items-center gap-2 space-y-0">
         <CardTitle className="font-heading text-base">Wallet</CardTitle>
-        {/* <Badge variant="secondary">Mock data</Badge> */}
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         <WalletBalance userId={userId} />

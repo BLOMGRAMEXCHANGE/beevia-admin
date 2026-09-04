@@ -30,28 +30,20 @@ import { PaginationControls } from "@/components/shared/pagination-controls";
 import { cn } from "@/lib/utils";
 import { formatNaira } from "@/lib/format";
 import {
-  TRANSACTION_STATUS_LABEL,
+  TRANSACTION_STATUS_OPTIONS,
   TRANSACTION_TYPE_OPTIONS,
-} from "@/features/wallet/constants";
-import { TransactionStatusBadge } from "@/features/wallet/components/transaction-status-badge";
-import { TransactionTypeBadge } from "@/features/wallet/components/transaction-type-badge";
-import type {
-  WalletTransactionStatus,
-  WalletTransactionType,
-} from "@/features/wallet/types";
+} from "@/features/transactions/constants";
+import { TransactionStatusBadge } from "@/features/transactions/components/transaction-status-badge";
+import { TransactionTypeBadge } from "@/features/transactions/components/transaction-type-badge";
 import {
   ALL_TRANSACTIONS_PAGE_LIMIT,
+  TransactionsApiError,
   useAllTransactions,
 } from "@/features/transactions/api";
 import type {
   PlatformTransaction,
   PlatformTransactionFilters,
 } from "@/features/transactions/types";
-
-const STATUS_OPTIONS = Object.entries(TRANSACTION_STATUS_LABEL) as [
-  WalletTransactionStatus,
-  string,
-][];
 
 function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString("en-NG", {
@@ -78,14 +70,13 @@ function SignedAmount({ transaction }: { transaction: PlatformTransaction }) {
   );
 }
 
-const EMPTY_TYPES: WalletTransactionType[] = [];
-const EMPTY_STATUSES: WalletTransactionStatus[] = [];
+const EMPTY_TYPES: string[] = [];
+const EMPTY_STATUSES: string[] = [];
 
 export function AllTransactionsView() {
   const [userQuery, setUserQuery] = useState("");
-  const [types, setTypes] = useState<WalletTransactionType[]>(EMPTY_TYPES);
-  const [statuses, setStatuses] =
-    useState<WalletTransactionStatus[]>(EMPTY_STATUSES);
+  const [types, setTypes] = useState<string[]>(EMPTY_TYPES);
+  const [statuses, setStatuses] = useState<string[]>(EMPTY_STATUSES);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
@@ -114,11 +105,8 @@ export function AllTransactionsView() {
     [debouncedUser, types, statuses, dateFrom, dateTo]
   );
 
-  const { data, isLoading, isError, isPlaceholderData } = useAllTransactions(
-    filters,
-    page,
-    ALL_TRANSACTIONS_PAGE_LIMIT
-  );
+  const { data, isLoading, isError, error, isPlaceholderData } =
+    useAllTransactions(filters, page, ALL_TRANSACTIONS_PAGE_LIMIT);
 
   const hasActiveFilters =
     Boolean(debouncedUser) ||
@@ -127,14 +115,14 @@ export function AllTransactionsView() {
     Boolean(dateFrom) ||
     Boolean(dateTo);
 
-  function toggleType(value: WalletTransactionType, checked: boolean) {
+  function toggleType(value: string, checked: boolean) {
     setTypes((current) =>
       checked ? [...current, value] : current.filter((v) => v !== value)
     );
     setPage(1);
   }
 
-  function toggleStatus(value: WalletTransactionStatus, checked: boolean) {
+  function toggleStatus(value: string, checked: boolean) {
     setStatuses((current) =>
       checked ? [...current, value] : current.filter((v) => v !== value)
     );
@@ -160,16 +148,27 @@ export function AllTransactionsView() {
           className="flex flex-col hover:underline"
           onClick={(event) => event.stopPropagation()}
         >
-          <span className="font-medium">{txn.user.name}</span>
-          <span className="text-xs text-muted-foreground">
-            {txn.user.username}
-          </span>
+          <span className="font-medium">{txn.user.name ?? "Unnamed user"}</span>
+          <span className="text-xs text-muted-foreground">{txn.user.id}</span>
         </Link>
       ),
     },
-    { header: "Type", cell: (txn) => <TransactionTypeBadge type={txn.type} /> },
+    {
+      header: "Type",
+      cell: (txn) => (
+        <TransactionTypeBadge type={txn.type} direction={txn.direction} />
+      ),
+    },
     { header: "Amount", cell: (txn) => <SignedAmount transaction={txn} /> },
-    { header: "Counterparty", cell: (txn) => txn.counterparty },
+    {
+      header: "Description",
+      cell: (txn) => (
+        <div className="flex flex-col">
+          <span>{txn.description || "—"}</span>
+          <span className="text-xs text-muted-foreground">{txn.reference}</span>
+        </div>
+      ),
+    },
     {
       header: "Status",
       cell: (txn) => <TransactionStatusBadge status={txn.status} />,
@@ -195,7 +194,7 @@ export function AllTransactionsView() {
     statuses.length === 0
       ? "All statuses"
       : statuses.length === 1
-        ? TRANSACTION_STATUS_LABEL[statuses[0]]
+        ? TRANSACTION_STATUS_OPTIONS.find((o) => o.value === statuses[0])?.label
         : `${statuses.length} statuses`;
 
   return (
@@ -214,7 +213,7 @@ export function AllTransactionsView() {
               </InputGroupAddon>
               <InputGroupInput
                 id="all-txn-user"
-                placeholder="Name, username, or phone"
+                placeholder="Name or user ID"
                 value={userQuery}
                 onChange={(event) => setUserQuery(event.target.value)}
               />
@@ -256,15 +255,15 @@ export function AllTransactionsView() {
               <DropdownMenuContent align="start" className="w-56">
                 <DropdownMenuLabel>Status</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {STATUS_OPTIONS.map(([value, label]) => (
+                {TRANSACTION_STATUS_OPTIONS.map((option) => (
                   <DropdownMenuCheckboxItem
-                    key={value}
-                    checked={statuses.includes(value)}
+                    key={option.value}
+                    checked={statuses.includes(option.value)}
                     onCheckedChange={(checked) =>
-                      toggleStatus(value, checked === true)
+                      toggleStatus(option.value, checked === true)
                     }
                   >
-                    {label}
+                    {option.label}
                   </DropdownMenuCheckboxItem>
                 ))}
               </DropdownMenuContent>
@@ -311,7 +310,9 @@ export function AllTransactionsView() {
           </div>
         ) : isError ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
-            Something went wrong loading transactions. Please try again.
+            {error instanceof TransactionsApiError
+              ? error.message
+              : "Something went wrong loading transactions. Please try again."}
           </p>
         ) : (
           <div
