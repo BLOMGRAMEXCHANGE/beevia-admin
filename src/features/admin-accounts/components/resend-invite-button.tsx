@@ -17,20 +17,27 @@ export function ResendInviteButton({ account }: { account: AdminAccount }) {
   const { mutate, isPending } = useResendAdminInvite();
 
   function handleClick() {
-    mutate(account.id, {
-      onSuccess: () => {
-        toast.success(`Invitation resent to ${account.email}.`);
-        setJustSent(true);
-        setTimeout(() => setJustSent(false), SENT_CONFIRMATION_MS);
+    mutate(
+      {
+        fullName: account.fullName,
+        email: account.email,
+        roleId: account.roleId,
       },
-      onError: (mutationError) => {
-        toast.error(
-          mutationError instanceof AdminAccountApiError
-            ? mutationError.message
-            : "Something went wrong. Please try again."
-        );
-      },
-    });
+      {
+        onSuccess: () => {
+          toast.success(`Invitation resent to ${account.email}.`);
+          setJustSent(true);
+          setTimeout(() => setJustSent(false), SENT_CONFIRMATION_MS);
+        },
+        onError: (mutationError) => {
+          toast.error(
+            mutationError instanceof AdminAccountApiError
+              ? mutationError.message
+              : "Something went wrong. Please try again."
+          );
+        },
+      }
+    );
   }
 
   return (

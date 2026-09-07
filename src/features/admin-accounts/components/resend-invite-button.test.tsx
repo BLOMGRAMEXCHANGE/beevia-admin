@@ -47,8 +47,20 @@ const INVITED_ACCOUNT: AdminAccount = {
 };
 
 describe("ResendInviteButton", () => {
-  test("posts to the resend endpoint and shows a success toast", async () => {
-    mockLiveClientPost.mockResolvedValue({ data: {} });
+  test("re-invites via the invite endpoint with the account's existing details", async () => {
+    mockLiveClientPost.mockResolvedValue({
+      data: {
+        data: {
+          id: INVITED_ACCOUNT.id,
+          full_name: INVITED_ACCOUNT.fullName,
+          email: INVITED_ACCOUNT.email,
+          role_id: INVITED_ACCOUNT.roleId,
+          role_name: INVITED_ACCOUNT.roleName,
+          status: "invited",
+          last_login_at: null,
+        },
+      },
+    });
     render(<ResendInviteButton account={INVITED_ACCOUNT} />, { wrapper });
 
     fireEvent.click(screen.getByRole("button", { name: /re-invite/i }));
@@ -56,9 +68,11 @@ describe("ResendInviteButton", () => {
     // Button flips to a confirmation state and disables to prevent a
     // double-send while the confirmation is showing.
     expect(await screen.findByRole("button", { name: "Sent" })).toBeDisabled();
-    expect(mockLiveClientPost).toHaveBeenCalledWith(
-      `/admin/accounts/${INVITED_ACCOUNT.id}/resend-invite`
-    );
+    expect(mockLiveClientPost).toHaveBeenCalledWith("/admin/accounts/invite", {
+      fullName: INVITED_ACCOUNT.fullName,
+      email: INVITED_ACCOUNT.email,
+      roleId: INVITED_ACCOUNT.roleId,
+    });
     expect(mockToastSuccess).toHaveBeenCalledWith(
       `Invitation resent to ${INVITED_ACCOUNT.email}.`
     );

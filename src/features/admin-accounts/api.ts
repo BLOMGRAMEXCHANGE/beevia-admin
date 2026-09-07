@@ -142,24 +142,35 @@ function toInviteAdminResult(data: InviteAdminResponseData): InviteAdminResult {
   };
 }
 
+export interface ResendAdminInvitePayload {
+  fullName: string;
+  email: string;
+  roleId: string;
+}
+
 /**
  * Resends the invite email to an admin who hasn't accepted yet.
  *
- * There's no documented resend endpoint yet — `POST /admin/accounts/{id}/
- * resend-invite` follows this codebase's existing convention (an action on a
- * specific account posts to a sub-path of `/admin/accounts/{id}`, e.g. invite
- * itself). Adjust the path if the backend documents a different one; the
- * response is read leniently (no fields are required) since its shape isn't
- * confirmed either.
+ * There's no dedicated resend endpoint — `POST /admin/accounts/{id}/resend-
+ * invite` 404s. This re-POSTs the same `/admin/accounts/invite` request used
+ * to invite them in the first place, which re-sends the email for an
+ * already-invited address.
  */
 export function useResendAdminInvite() {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (adminId: string) => {
+    mutationFn: async (payload: ResendAdminInvitePayload) => {
       try {
-        await liveClient.post(`/admin/accounts/${adminId}/resend-invite`);
+        const { data } = await liveClient.post<{
+          data: InviteAdminResponseData;
+        }>("/admin/accounts/invite", payload);
+        return toInviteAdminResult(data.data);
       } catch (error) {
         throw toAdminAccountApiError(error);
       }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-accounts"] });
     },
   });
 }
