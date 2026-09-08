@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Send } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AdminAccountApiError,
@@ -18,11 +18,7 @@ export function ResendInviteButton({ account }: { account: AdminAccount }) {
 
   function handleClick() {
     mutate(
-      {
-        fullName: account.fullName,
-        email: account.email,
-        roleId: account.roleId,
-      },
+      { adminId: account.id },
       {
         onSuccess: () => {
           toast.success(`Invitation resent to ${account.email}.`);
