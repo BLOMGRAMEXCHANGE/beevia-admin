@@ -143,27 +143,21 @@ function toInviteAdminResult(data: InviteAdminResponseData): InviteAdminResult {
 }
 
 export interface ResendAdminInvitePayload {
-  fullName: string;
-  email: string;
-  roleId: string;
+  adminId: string;
 }
 
 /**
- * Resends the invite email to an admin who hasn't accepted yet.
- *
- * There's no dedicated resend endpoint — `POST /admin/accounts/{id}/resend-
- * invite` 404s. This re-POSTs the same `/admin/accounts/invite` request used
- * to invite them in the first place, which re-sends the email for an
- * already-invited address.
+ * Resends the invite email to an admin who hasn't accepted yet, via the
+ * dedicated `POST /admin/accounts/{admin_id}/reinvite` endpoint (no body).
  */
 export function useResendAdminInvite() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: ResendAdminInvitePayload) => {
+    mutationFn: async ({ adminId }: ResendAdminInvitePayload) => {
       try {
         const { data } = await liveClient.post<{
           data: InviteAdminResponseData;
-        }>("/admin/accounts/invite", payload);
+        }>(`/admin/accounts/${adminId}/reinvite`);
         return toInviteAdminResult(data.data);
       } catch (error) {
         throw toAdminAccountApiError(error);

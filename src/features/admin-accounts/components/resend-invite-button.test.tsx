@@ -47,7 +47,7 @@ const INVITED_ACCOUNT: AdminAccount = {
 };
 
 describe("ResendInviteButton", () => {
-  test("re-invites via the invite endpoint with the account's existing details", async () => {
+  test("re-invites via the dedicated reinvite endpoint", async () => {
     mockLiveClientPost.mockResolvedValue({
       data: {
         data: {
@@ -68,11 +68,9 @@ describe("ResendInviteButton", () => {
     // Button flips to a confirmation state and disables to prevent a
     // double-send while the confirmation is showing.
     expect(await screen.findByRole("button", { name: "Sent" })).toBeDisabled();
-    expect(mockLiveClientPost).toHaveBeenCalledWith("/admin/accounts/invite", {
-      fullName: INVITED_ACCOUNT.fullName,
-      email: INVITED_ACCOUNT.email,
-      roleId: INVITED_ACCOUNT.roleId,
-    });
+    expect(mockLiveClientPost).toHaveBeenCalledWith(
+      `/admin/accounts/${INVITED_ACCOUNT.id}/reinvite`
+    );
     expect(mockToastSuccess).toHaveBeenCalledWith(
       `Invitation resent to ${INVITED_ACCOUNT.email}.`
     );
