@@ -1,28 +1,34 @@
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { DateRangeFields } from "@/features/reports/components/date-range-fields";
-import { getReportType } from "@/features/reports/report-types";
-import type { ReportParams, ReportTypeId } from "@/features/reports/types";
+import { ReportFilterFields } from "@/features/reports/components/report-filter-fields";
+import type { ReportParams, ReportType } from "@/features/reports/types";
 
 export function ParameterForm({
-  typeId,
+  type,
   params,
   onParamsChange,
   onBack,
   onGenerate,
   isGenerating,
 }: {
-  typeId: ReportTypeId;
+  type: ReportType;
   params: ReportParams;
   onParamsChange: (params: ReportParams) => void;
   onBack: () => void;
   onGenerate: () => void;
   isGenerating: boolean;
 }) {
-  const type = getReportType(typeId);
   const { from, to } = params.range;
-  const canGenerate = Boolean(from && to) && from <= to;
+  const rangeInvalid = Boolean(from && to) && from > to;
+  const canGenerate = Boolean(from && to) && !rangeInvalid;
 
   return (
     <div className="flex flex-col gap-4">
@@ -37,39 +43,58 @@ export function ParameterForm({
       </Button>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{type.title}</CardTitle>
+          <CardTitle className="text-base">{type.label}</CardTitle>
+          {type.description && (
+            <CardDescription className="max-w-3xl">
+              {type.description}
+            </CardDescription>
+          )}
         </CardHeader>
-        <CardContent className="flex flex-col gap-5">
-          {/* Required for every report type. */}
-          <DateRangeFields
-            value={params.range}
-            onChange={(range) => onParamsChange({ ...params, range })}
-          />
-
-          {/* ================================================================
-              EXTENSION POINT — report-specific filters.
-              Each report type supplies its own filters via `renderFilters` on
-              its REPORT_TYPES entry; they render here and merge their values
-              into `ReportParams`. Report types without extra filters render
-              nothing here.
-              ================================================================ */}
-          {type.renderFilters?.({ params, onChange: onParamsChange })}
-
-          <div>
-            <Button
-              onClick={onGenerate}
-              disabled={!canGenerate || isGenerating}
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Generating report…
-                </>
-              ) : (
-                "Generate Report"
+        <CardContent>
+          <form
+            className="flex flex-col gap-5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (canGenerate && !isGenerating) onGenerate();
+            }}
+          >
+            <fieldset className="flex flex-col gap-2" disabled={isGenerating}>
+              <legend className="mb-2 text-sm font-medium">Date range</legend>
+              <DateRangeFields
+                value={params.range}
+                onChange={(range) => onParamsChange({ ...params, range })}
+              />
+              {rangeInvalid && (
+                <p className="text-xs text-destructive">
+                  The start date must be on or before the end date.
+                </p>
               )}
-            </Button>
-          </div>
+            </fieldset>
+
+            {type.filters.length > 0 && (
+              <fieldset className="flex flex-col" disabled={isGenerating}>
+                <legend className="mb-2 text-sm font-medium">Filters</legend>
+                <ReportFilterFields
+                  filters={type.filters}
+                  params={params}
+                  onChange={onParamsChange}
+                />
+              </fieldset>
+            )}
+
+            <div>
+              <Button type="submit" disabled={!canGenerate || isGenerating}>
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Queuing report…
+                  </>
+                ) : (
+                  "Generate report"
+                )}
+              </Button>
+            </div>
+          </form>
         </CardContent>
       </Card>
     </div>

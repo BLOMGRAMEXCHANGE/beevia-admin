@@ -1,135 +1,135 @@
 /**
- * RP1 — the shared reports shell. These types describe the generic flow
- * (pick a type → set params → generate → preview). Report-specific parameter
- * and content shapes are intentionally NOT modelled here yet; each of the three
- * real report types gets its own follow-on pass.
+ * Reports are server-driven. The backend owns the catalogue
+ * (`GET /admin/reports/types`) — which report types exist, what columns each
+ * one returns and which filters it accepts — so nothing here hard-codes a
+ * report type. A new report type on the backend shows up in the UI with no
+ * frontend change; `report-catalogue.ts` only supplies presentation extras
+ * (icon, ordering) and falls back gracefully for types it hasn't seen.
  */
 
-import type { WalletTransactionType } from "@/features/wallet/types";
-import type { DiscrepancyType } from "@/features/reconciliation/types";
-import type { ActivityEventType } from "@/features/dashboard/mock/activity";
+/** Report type slug, e.g. `transactions`. Open string by design — see above. */
+export type ReportTypeId = string;
 
-export type ReportTypeId =
-  "user_kyc" | "transaction_financial" | "admin_activity";
+/** One column of a report, in the order the backend wants it displayed. */
+export interface ReportColumn {
+  key: string;
+  label: string;
+}
 
-/** The date range every report requires. `from`/`to` are `yyyy-mm-dd` strings. */
+export interface ReportFilterOption {
+  value: string;
+  label: string;
+}
+
+/** A single-select filter a report type accepts, with its allowed values. */
+export interface ReportFilterDef {
+  key: string;
+  label: string;
+  options: ReportFilterOption[];
+}
+
+/** An entry in the report catalogue. */
+export interface ReportType {
+  id: ReportTypeId;
+  label: string;
+  description: string;
+  columns: ReportColumn[];
+  filters: ReportFilterDef[];
+}
+
+/**
+ * Generation is a queued job: `POST /admin/reports` returns `queued`, and the
+ * report is polled until it reaches a terminal state. `failed` carries `error`.
+ */
+export type ReportStatus = "queued" | "running" | "ready" | "failed";
+
+export const TERMINAL_REPORT_STATUSES: ReportStatus[] = ["ready", "failed"];
+
+export function isTerminalReportStatus(status: ReportStatus): boolean {
+  return TERMINAL_REPORT_STATUSES.includes(status);
+}
+
+/**
+ * Only `queued` and `ready` have been observed on the wire. Anything else that
+ * isn't `failed` (e.g. `running`, `processing`) is still in flight, so it maps
+ * to `running` and keeps the poll going instead of stalling on an unknown value.
+ */
+export function toReportStatus(value: string): ReportStatus {
+  if (value === "queued" || value === "ready" || value === "failed") {
+    return value;
+  }
+  return "running";
+}
+
+/** One preview row — keys are backend field names, values arrive untyped. */
+export type ReportRow = Record<string, unknown>;
+
+/**
+ * Aggregate figures for the window, keyed by the backend (e.g. `credited`,
+ * `debited`, `entries` for transactions). Open-keyed: each report type returns
+ * whatever totals make sense for it, and the UI renders what it's given.
+ */
+export type ReportTotals = Record<string, unknown>;
+
+export interface ReportPreviewData {
+  /** A capped sample of the result set — the full data is in the download. */
+  rows: ReportRow[];
+  totals: ReportTotals | null;
+  /** Column order for the preview; may differ from the catalogue's list. */
+  columns: ReportColumn[];
+}
+
+export interface ReportRequester {
+  adminId: string | null;
+  name: string | null;
+}
+
+/** A generated (or generating) report, as returned by the reports endpoints. */
+export interface Report {
+  id: string;
+  type: ReportTypeId;
+  /** Human label from the backend — used even for unknown report types. */
+  label: string;
+  status: ReportStatus;
+  /** ISO timestamps covering the requested window (inclusive). */
+  dateFrom: string;
+  dateTo: string;
+  filters: Record<string, string>;
+  rowCount: number | null;
+  /** True when the result set was capped — the download is capped too. */
+  truncated: boolean;
+  error: string | null;
+  requestedBy: ReportRequester;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  /** Path (not absolute URL) on the API, e.g. `/admin/reports/{id}/download`. */
+  downloadUrl: string | null;
+  preview: ReportPreviewData | null;
+}
+
+/** The date range every report requires. `from`/`to` are `yyyy-mm-dd`. */
 export interface DateRange {
   from: string;
   to: string;
 }
 
 /**
- * Account-type segment filter — specific to the User & KYC report (RP2).
- * "all" means no segmentation.
+ * Sentinel used by the filter selects for "no filtering on this key". Stripped
+ * out before the request body is built — the API expects the key to be absent.
  */
-export type AccountTypeFilter = "all" | "chat_only" | "chat_banking";
+export const ANY_FILTER_VALUE = "all";
 
-export const ACCOUNT_TYPE_LABELS: Record<AccountTypeFilter, string> = {
-  all: "All",
-  chat_only: "Chat Only",
-  chat_banking: "Chat + Banking",
-};
-
-/**
- * Parameters submitted from the parameter form. The date range is required for
- * every report type; report-specific filters are optional fields added here as
- * each report type is built out (e.g. `accountType` for the User & KYC report).
- */
+/** What the parameter form collects. `filters` is keyed by `ReportFilterDef.key`. */
 export interface ReportParams {
   range: DateRange;
-  /** User & KYC report only. Absent on other report types. */
-  accountType?: AccountTypeFilter;
-  /** Transaction & Financial report only. Absent on other report types. */
-  transactionType?: TransactionTypeFilter;
-  /** Admin Activity / Audit report only. Absent on other report types. */
-  adminActivityType?: AdminActivityTypeFilter;
+  filters: Record<string, string>;
 }
 
-/**
- * Action-type filter for the Admin Activity / Audit report (RP4). Uses the
- * exact event types from Dashboard Home's Recent Activity feed
- * (`ActivityEventType`); "all" means no filtering.
- */
-export type AdminActivityTypeFilter = ActivityEventType | "all";
-
-/** Filter labels — the wording shown in the Action Type select. */
-export const ADMIN_ACTIVITY_TYPE_LABELS: Record<
-  AdminActivityTypeFilter,
-  string
-> = {
-  all: "All",
-  admin_invited: "Admin Invited",
-  admin_role_changed: "Role Changed",
-  admin_account_status_changed: "Account Status Changed",
-  user_status_changed: "User Status Changed",
-};
-
-/**
- * Transaction-type filter for the Transaction & Financial report (RP3). Uses
- * the exact same categories as the "All Transactions" tab
- * (`WalletTransactionType`); "all" means no filtering.
- */
-export type TransactionTypeFilter = WalletTransactionType | "all";
-
-/** One row of the Transaction & Financial report's by-type breakdown. */
-export interface TransactionTypeRow {
-  type: WalletTransactionType;
-  label: string;
-  volume: number;
-  count: number;
-}
-
-/**
- * Reconciliation discrepancy summary for the selected period. This is a genuine
- * conditional: `not_run` means no reconciliation covered the period, and must
- * NOT be rendered as "zero discrepancies" (that would imply a clean check that
- * never happened).
- */
-export type ReconciliationSummary =
-  | { status: "not_run" }
-  | {
-      status: "ran";
-      ranAt: string;
-      /** Count per discrepancy category — same three as the Reconciliation tab. */
-      counts: Record<DiscrepancyType, number>;
-    };
-
-/** Aggregate figures shown by the Transaction & Financial report (RP3). */
-export interface TransactionFinancialStats {
-  transactionType: TransactionTypeFilter;
-  totalVolume: number;
-  totalCount: number;
-  /** All six type rows, or just the selected one when filtered. */
-  breakdown: TransactionTypeRow[];
-  reconciliation: ReconciliationSummary;
-}
-
-/** Aggregate figures shown by the User & KYC report (RP2). */
-export interface UserKycStats {
-  accountType: AccountTypeFilter;
-  totalSignups: number;
-  /** verified + pending + failed === totalSignups */
-  verified: number;
-  pending: number;
-  failed: number;
-  /** New signups split by account type for the period. */
-  breakdown: {
-    chatOnly: number;
-    chatBanking: number;
-  };
-}
-
-/** The result of a (mock) "generate" run — enough to render the preview. */
-export interface GeneratedReport {
-  typeId: ReportTypeId;
-  params: ReportParams;
-  generatedAt: string;
-}
-
-/** A row in the Recent Reports history list. */
-export interface RecentReport {
-  id: string;
-  typeId: ReportTypeId;
-  params: ReportParams;
-  generatedAt: string;
+/** Query for the recent-reports list. Empty strings mean "any". */
+export interface ReportListFilters {
+  type: ReportTypeId | "";
+  status: ReportStatus | "";
+  /** Only reports the signed-in admin requested. */
+  mine: boolean;
 }

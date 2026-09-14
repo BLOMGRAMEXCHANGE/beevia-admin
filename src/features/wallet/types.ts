@@ -1,14 +1,13 @@
 import type { TransactionDirection } from "@/features/transactions/types";
 
 /**
- * NOTE: everything below this line is the vocabulary the Transaction &
- * Financial report's mock generator (`features/reports`) is built against —
+ * NOTE: everything below this line is the legacy mock wallet vocabulary —
  * it is no longer what the live per-user Wallet tab uses. The Wallet tab now
  * talks to the real `GET /admin/transactions/users/{id}` endpoint, whose
  * type/status vocabulary matches the platform-wide `/admin/transactions`
  * endpoint instead (see `WalletLedgerTransaction` below, and
- * `features/transactions/types.ts`). Left as-is so the still-mock report keeps
- * working; do not repurpose these for real wallet data.
+ * `features/transactions/types.ts`). Do not repurpose these for real wallet
+ * data.
  */
 export type WalletTransactionType =
   | "wallet_funding_bank"

@@ -2,13 +2,12 @@ import type { TransferParty } from "@/features/pending-transfers/types";
 
 /**
  * NOTE: everything below this line (through `ReconciliationRun`) is the mock
- * comparison model the Transaction & Financial report's mock generator
- * (`features/reports`) is built against — it is no longer what the live
+ * comparison model (`reconciliation/mock-data.ts`) — it is no longer what the live
  * Reconciliation tab / per-user reconciliation check use. Those now talk to
  * the real `GET /admin/reconciliation/pool` and
  * `GET /admin/reconciliation/users/{id}` endpoints (see `PoolReconciliation`
- * and `UserReconciliation` further down). Left as-is so the still-mock report
- * keeps working; do not repurpose these for real reconciliation data.
+ * and `UserReconciliation` further down). Do not repurpose these for real
+ * reconciliation data.
  *
  * The three ways a Beevia ledger record and an Anchor record can fail to agree.
  */

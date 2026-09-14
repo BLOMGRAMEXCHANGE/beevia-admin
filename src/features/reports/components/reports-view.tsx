@@ -1,16 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { ReportTypeGallery } from "@/features/reports/components/report-type-gallery";
 import { ParameterForm } from "@/features/reports/components/parameter-form";
 import { ReportPreview } from "@/features/reports/components/report-preview";
 import { RecentReports } from "@/features/reports/components/recent-reports";
-import { useGenerateReport, useRecentReports } from "@/features/reports/api";
-import { buildGeneratedReport } from "@/features/reports/mock-data";
+import {
+  ReportsApiError,
+  useGenerateReport,
+  useRecentReports,
+  useReportTypes,
+  type GenerateReportInput,
+} from "@/features/reports/api";
+import { useReportDownload } from "@/features/reports/use-report-download";
 import type {
   DateRange,
-  GeneratedReport,
-  RecentReport,
+  Report,
+  ReportListFilters,
   ReportParams,
   ReportTypeId,
 } from "@/features/reports/types";
@@ -18,62 +25,101 @@ import type {
 type View =
   | { step: "gallery" }
   | { step: "form"; typeId: ReportTypeId }
-  | { step: "preview"; report: GeneratedReport; from: "form" | "history" };
+  | {
+      step: "report";
+      reportId: string;
+      typeId: ReportTypeId;
+      from: "form" | "list";
+    };
 
-function defaultRange(): DateRange {
-  const now = new Date();
+function toDateInput(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
-  const first = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
-  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  return { from: first, to: today };
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-/** Fresh params for a newly opened form, seeded with any report-specific
- *  filter defaults. */
-function initialParams(typeId: ReportTypeId): ReportParams {
-  const params: ReportParams = { range: defaultRange() };
-  if (typeId === "user_kyc") params.accountType = "all";
-  if (typeId === "transaction_financial") params.transactionType = "all";
-  if (typeId === "admin_activity") params.adminActivityType = "all";
-  return params;
+/** Month to date — the window most reports are pulled for. */
+function defaultRange(): DateRange {
+  const now = new Date();
+  return {
+    from: toDateInput(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: toDateInput(now),
+  };
+}
+
+/** A settled report's inputs, back in form shape — for "Generate again". */
+function paramsFromReport(report: Report): ReportParams {
+  return {
+    range: {
+      from: report.dateFrom.slice(0, 10),
+      to: report.dateTo.slice(0, 10),
+    },
+    filters: { ...report.filters },
+  };
 }
 
 export function ReportsView() {
   const [view, setView] = useState<View>({ step: "gallery" });
   const [params, setParams] = useState<ReportParams>(() => ({
     range: defaultRange(),
+    filters: {},
   }));
 
-  const recentReports = useRecentReports();
+  // Lives here, not in the list, so it survives opening a report and coming
+  // back — the admin returns to the same tab, filters and page.
+  const [listFilters, setListFilters] = useState<ReportListFilters>({
+    type: "",
+    status: "",
+    mine: true,
+  });
+  const [listPage, setListPage] = useState(1);
+
+  const reportTypes = useReportTypes();
   const generate = useGenerateReport();
+  const { download, downloadingId } = useReportDownload();
+
+  const findType = (typeId: ReportTypeId) =>
+    reportTypes.data?.find((type) => type.id === typeId);
+  const formType = view.step === "form" ? findType(view.typeId) : undefined;
+  const showGallery =
+    view.step === "gallery" || (view.step === "form" && !formType);
+
+  // Paused while off-screen; refetches on return, so it's never stale.
+  const recentReports = useRecentReports(listFilters, listPage, {
+    enabled: showGallery,
+  });
 
   function openForm(typeId: ReportTypeId) {
-    setParams(initialParams(typeId));
+    // The date range carries over between types; filters don't — each type
+    // declares its own keys.
+    setParams((current) => ({ range: current.range, filters: {} }));
+    generate.reset();
     setView({ step: "form", typeId });
   }
 
-  function handleGenerate(typeId: ReportTypeId) {
-    generate.mutate(
-      { typeId, params },
-      {
-        onSuccess: (report) =>
-          setView({ step: "preview", report, from: "form" }),
-      }
-    );
+  function runGeneration(input: GenerateReportInput) {
+    generate.mutate(input, {
+      onSuccess: (report) => {
+        setView({
+          step: "report",
+          reportId: report.id,
+          typeId: report.type,
+          from: "form",
+        });
+      },
+      onError: (error) => {
+        toast.error(
+          error instanceof ReportsApiError
+            ? error.message
+            : "Couldn't queue this report. Please try again."
+        );
+      },
+    });
   }
 
-  function reopen(report: RecentReport) {
-    // Reopening just shows the same generic placeholder preview using this
-    // entry's stored parameters — no re-generation needed for RP1.
-    setView({
-      step: "preview",
-      report: buildGeneratedReport(
-        report.typeId,
-        report.params,
-        new Date(report.generatedAt).getTime()
-      ),
-      from: "history",
-    });
+  function regenerate(report: Report) {
+    const next = paramsFromReport(report);
+    setParams(next);
+    runGeneration({ typeId: report.type, params: next });
   }
 
   return (
@@ -83,49 +129,78 @@ export function ReportsView() {
           Reports
         </h1>
         <p className="text-sm text-muted-foreground">
-          Generate platform reports over a date range.
+          Generate platform reports over a date range, preview them, and
+          download the full CSV.
         </p>
       </div>
 
-      {view.step === "gallery" && (
+      {showGallery && (
         <>
-          <ReportTypeGallery onSelect={openForm} />
+          <ReportTypeGallery
+            types={reportTypes.data}
+            isLoading={reportTypes.isLoading}
+            error={reportTypes.error}
+            onRetry={() => reportTypes.refetch()}
+            onSelect={openForm}
+          />
           <RecentReports
-            reports={recentReports.data}
+            reports={recentReports.data?.reports}
+            meta={recentReports.data?.meta}
             isLoading={recentReports.isLoading}
-            onReopen={reopen}
+            isRefreshing={recentReports.isPlaceholderData}
+            error={recentReports.error}
+            onRetry={() => recentReports.refetch()}
+            types={reportTypes.data}
+            filters={listFilters}
+            onFiltersChange={(next) => {
+              setListFilters(next);
+              setListPage(1);
+            }}
+            page={listPage}
+            onPageChange={setListPage}
+            onOpen={(report) =>
+              setView({
+                step: "report",
+                reportId: report.id,
+                typeId: report.type,
+                from: "list",
+              })
+            }
+            onDownload={download}
+            downloadingId={downloadingId}
           />
         </>
       )}
 
-      {view.step === "form" && (
+      {view.step === "form" && formType && (
         <ParameterForm
-          typeId={view.typeId}
+          key={formType.id}
+          type={formType}
           params={params}
           onParamsChange={setParams}
-          onBack={() => {
-            generate.reset();
-            setView({ step: "gallery" });
-          }}
-          onGenerate={() => handleGenerate(view.typeId)}
+          onBack={() => setView({ step: "gallery" })}
+          onGenerate={() => runGeneration({ typeId: formType.id, params })}
           isGenerating={generate.isPending}
         />
       )}
 
-      {view.step === "preview" && (
+      {view.step === "report" && (
         <ReportPreview
-          report={view.report}
+          key={view.reportId}
+          reportId={view.reportId}
+          type={findType(view.typeId)}
           backLabel={
-            view.from === "history" ? "Back to reports" : "Back to report types"
+            view.from === "list" ? "Back to reports" : "Change parameters"
           }
-          onBack={() => {
-            generate.reset();
+          onBack={() =>
             setView(
-              view.from === "history"
-                ? { step: "gallery" }
-                : { step: "form", typeId: view.report.typeId }
-            );
-          }}
+              view.from === "form"
+                ? { step: "form", typeId: view.typeId }
+                : { step: "gallery" }
+            )
+          }
+          onRegenerate={regenerate}
+          isRegenerating={generate.isPending}
         />
       )}
     </div>
