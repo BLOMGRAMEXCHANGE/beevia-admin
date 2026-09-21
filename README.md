@@ -110,6 +110,14 @@ with clearly marked `TODO(backend)` comments in the code:
   SSE without touching `SocketProvider` or feature code. Confirm the protocol,
   auth handshake, and notification event name/payload with the backend developer
   before wiring this to production.
+- **Chat report detail shape** — the documented sample for
+  `GET /admin/chats/reports/{id}` echoes the _list_ envelope
+  (`{ reports: [...], pagination }`) while the review endpoint documents a bare
+  report with `participants` and `messages`. `unwrapReportDetail` accepts both;
+  drop the list branch once confirmed.
+- **Chat block entry shape** — `blocked` / `blocked_by` on
+  `GET /admin/chats/users/{id}` came back empty, so `toBlockEntry` accepts either
+  a bare user or a `{ user, created_at }` wrapper.
 - **Cross-origin cookies** — since the API is a different origin, the refresh
   cookie will only be sent automatically if the backend enables CORS with
   credentials and `SameSite=None; Secure` cookies.

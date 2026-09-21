@@ -14,6 +14,7 @@ import { CaseNotes } from "@/features/users/components/case-notes";
 import { AuditTrail } from "@/features/users/components/audit-trail";
 import { VerificationDetailPanel } from "@/features/users/components/verification-detail-panel";
 import { ActionHistory } from "@/features/users/components/action-history";
+import { UserChatActivity } from "@/features/chats/components/user-chat-activity";
 
 function AccountDetailSkeleton() {
   return (
@@ -90,6 +91,8 @@ export function AccountDetail({ userId }: { userId: string }) {
       )}
 
       <VerificationDetailPanel userId={userId} />
+
+      <UserChatActivity userId={userId} />
 
       <Card>
         <CardHeader>

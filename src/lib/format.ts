@@ -37,3 +37,15 @@ export function humanizeToken(value: string): string {
     .map((word) => word[0].toUpperCase() + word.slice(1))
     .join(" ");
 }
+
+/** Formats an ISO timestamp as e.g. "09/21/2026, 12:09 PM" — for places where
+ * the time of day matters (message activity, report timestamps). */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}

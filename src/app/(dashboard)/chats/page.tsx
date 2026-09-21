@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/shared/placeholder-page";
+import { ConversationsTable } from "@/features/chats/components/conversations-table";
 
 export default function ChatsPage() {
-  return <PlaceholderPage title="Chats" description="Chat moderation tools." />;
+  return <ConversationsTable />;
 }
