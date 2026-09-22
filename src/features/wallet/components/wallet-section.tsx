@@ -19,14 +19,16 @@ import {
   type DataTableColumn,
 } from "@/components/shared/data-table";
 import { PaginationControls } from "@/components/shared/pagination-controls";
+import { VirtualAccount } from "@/features/wallet/components/virtual-account";
+import { WalletAccountStatusBadge } from "@/features/wallet/components/wallet-account-status-badge";
 import { cn } from "@/lib/utils";
-import { formatNaira } from "@/lib/format";
+import { formatMoney, formatNaira, humanizeToken } from "@/lib/format";
 import { TRANSACTIONS_PAGE_LIMIT } from "@/features/wallet/constants";
 import { TRANSACTION_TYPE_OPTIONS } from "@/features/transactions/constants";
 import { TransactionStatusBadge } from "@/features/transactions/components/transaction-status-badge";
 import { TransactionTypeBadge } from "@/features/transactions/components/transaction-type-badge";
 import {
-  useWalletBalance,
+  useUserWallets,
   useWalletTransactions,
   WalletApiError,
 } from "@/features/wallet/api";
@@ -64,23 +66,74 @@ function SignedAmount({
   );
 }
 
-function WalletBalance({ userId }: { userId: string }) {
-  const { data, isLoading, isError } = useWalletBalance(userId);
+/** The wallet records themselves — balance, status and the virtual account
+ * funds are paid into. Balance comes from the wallet record now rather than
+ * being inferred from the most recent ledger row. */
+function WalletAccounts({ userId }: { userId: string }) {
+  const { data, isLoading, isError, error } = useUserWallets(userId);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-9 w-40" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        {error instanceof WalletApiError && error.status === 403
+          ? error.message
+          : "Wallet details could not be loaded."}
+      </p>
+    );
+  }
+
+  if (!data || data.wallets.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        This user has no wallet yet.
+      </p>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-sm text-muted-foreground">Current balance</span>
-      {isLoading ? (
-        <Skeleton className="h-9 w-40" />
-      ) : isError ? (
-        <span className="text-sm text-muted-foreground">
-          Balance could not be loaded.
-        </span>
-      ) : (
-        <span className="font-heading text-3xl font-bold tracking-tight tabular-nums">
-          {formatNaira(data ?? 0)}
-        </span>
-      )}
+    <div className="flex flex-col gap-4">
+      {data.wallets.map((wallet) => (
+        <div
+          key={wallet.id}
+          className="flex flex-wrap items-start justify-between gap-4"
+        >
+          <div className="flex flex-col gap-1">
+            <span className="text-sm text-muted-foreground">
+              Current balance
+              {data.wallets.length > 1 && ` (${wallet.currency})`}
+            </span>
+            <span className="font-heading text-3xl font-bold tracking-tight tabular-nums">
+              {formatMoney(wallet.balance, wallet.currency)}
+            </span>
+            <div className="flex items-center gap-2">
+              <WalletAccountStatusBadge status={wallet.status} />
+              {wallet.provider && (
+                <span className="text-xs text-muted-foreground">
+                  via {humanizeToken(wallet.provider)}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-sm text-muted-foreground">
+              Virtual account
+            </span>
+            <VirtualAccount
+              account={wallet.virtualAccount}
+              className="flex flex-col"
+            />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -282,7 +335,7 @@ export function WalletSection({ userId }: { userId: string }) {
         <CardTitle className="font-heading text-base">Wallet</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
-        <WalletBalance userId={userId} />
+        <WalletAccounts userId={userId} />
         <div className="border-t pt-6">
           <TransactionHistory userId={userId} />
         </div>

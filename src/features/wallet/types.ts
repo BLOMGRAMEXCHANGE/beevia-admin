@@ -108,3 +108,54 @@ export interface WalletLedgerPage {
     totalPages: number;
   };
 }
+
+// ---------------------------------------------------------------------------
+// Admin wallets module — `GET /admin/wallets` and
+// `GET /admin/wallets/users/{userId}`. A wallet account is the record itself,
+// distinct from the user-level `WalletStatus` in `types/user.ts` which
+// describes whether a user has a wallet at all.
+// ---------------------------------------------------------------------------
+
+export type WalletAccountStatus = "active" | "locked" | "frozen" | "closed";
+
+/** The virtual bank account funds are paid into. Not every wallet has one. */
+export interface WalletVirtualAccount {
+  accountNumber: string;
+  bankName: string;
+}
+
+export interface WalletAccount {
+  id: string;
+  userId: string;
+  userName: string | null;
+  currency: string;
+  /** Major units (naira, not kobo) — the API sends a decimal string. */
+  balance: number;
+  status: WalletAccountStatus;
+  provider: string | null;
+  virtualAccount: WalletVirtualAccount | null;
+}
+
+export interface WalletCurrencyTotal {
+  currency: string;
+  wallets: number;
+  totalBalance: number;
+}
+
+export interface WalletsSummary {
+  totalWallets: number;
+  byCurrency: WalletCurrencyTotal[];
+  /** Open-ended: the API only returns statuses that actually have wallets. */
+  byStatus: Record<string, number>;
+}
+
+export interface WalletsFilters {
+  search?: string;
+  currency?: string;
+  status?: WalletAccountStatus;
+}
+
+export interface UserWallets {
+  user: { id: string; name: string | null } | null;
+  wallets: WalletAccount[];
+}

@@ -1,5 +1,6 @@
 import type { StatusTone } from "@/components/shared/status-badge";
 import type {
+  WalletAccountStatus,
   WalletTransactionDirection,
   WalletTransactionStatus,
   WalletTransactionType,
@@ -95,3 +96,39 @@ export const SETTLED_STATUSES: WalletTransactionStatus[] = [
 ];
 
 export const TRANSACTIONS_PAGE_LIMIT = 10;
+
+// ---------------------------------------------------------------------------
+// Admin wallets module
+// ---------------------------------------------------------------------------
+
+export const WALLET_ACCOUNT_STATUS_LABEL: Record<WalletAccountStatus, string> =
+  {
+    active: "Active",
+    locked: "Locked",
+    frozen: "Frozen",
+    closed: "Closed",
+  };
+
+export const WALLET_ACCOUNT_STATUS_TONE: Record<
+  WalletAccountStatus,
+  StatusTone
+> = {
+  active: "green",
+  // Locked and frozen are both "money can't move", but they aren't the same
+  // thing operationally, so they don't share a colour.
+  locked: "amber",
+  frozen: "blue",
+  closed: "red",
+};
+
+export const WALLET_ACCOUNT_STATUS_OPTIONS: {
+  value: WalletAccountStatus;
+  label: string;
+}[] = [
+  { value: "active", label: "Active" },
+  { value: "locked", label: "Locked" },
+  { value: "frozen", label: "Frozen" },
+  { value: "closed", label: "Closed" },
+];
+
+export const WALLETS_PAGE_LIMIT = 20;

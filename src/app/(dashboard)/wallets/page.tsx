@@ -1,7 +1,5 @@
-import { PlaceholderPage } from "@/components/shared/placeholder-page";
+import { WalletsTable } from "@/features/wallet/components/wallets-table";
 
 export default function WalletsPage() {
-  return (
-    <PlaceholderPage title="Wallets" description="Wallet management tools" />
-  );
+  return <WalletsTable />;
 }

@@ -45,15 +45,40 @@ function paginate<T>(rows: T[], page: number, limit: number) {
   return rows.slice(start, start + limit);
 }
 
-/** Fake `GET /admin/transactions/users/{userId}` — respects page/limit like the
- *  real endpoint, so both the balance call (limit 1) and the history call
- *  (limit 10) get correctly shaped, correctly paginated responses. */
-function mockLedgerEndpoint(rowsByUser: Record<string, typeof POPULATED_ROWS>) {
+const POPULATED_WALLET = {
+  id: "wallet-1",
+  user: { id: POPULATED_USER, name: "Test User" },
+  currency: "NGN",
+  balance: "19000.00",
+  status: "active",
+  provider: "anchor",
+  vba: { account_number: "6850539275", bank_name: "PROVIDUS BANK" },
+};
+
+/** Fakes both endpoints the section talks to: `GET /admin/wallets/users/{id}`
+ *  for the wallet record, and `GET /admin/transactions/users/{id}` for the
+ *  ledger (respecting page/limit like the real one, so pagination is exercised). */
+function mockWalletEndpoints({
+  rowsByUser = {} as Record<string, typeof POPULATED_ROWS>,
+  walletsByUser = {} as Record<string, (typeof POPULATED_WALLET)[]>,
+}) {
   mockLiveClientGet.mockImplementation(
-    (url: string, config: { params: { page: number; limit: number } }) => {
+    (url: string, config?: { params: { page: number; limit: number } }) => {
       const userId = url.split("/").pop() as string;
+
+      if (url.startsWith("/admin/wallets/users/")) {
+        return Promise.resolve({
+          data: {
+            data: {
+              user: { id: userId, name: "Test User" },
+              wallets: walletsByUser[userId] ?? [],
+            },
+          },
+        });
+      }
+
       const rows = rowsByUser[userId] ?? [];
-      const { page, limit } = config.params;
+      const { page, limit } = config!.params;
       return Promise.resolve({
         data: {
           data: {
@@ -73,21 +98,29 @@ function mockLedgerEndpoint(rowsByUser: Record<string, typeof POPULATED_ROWS>) {
 }
 
 describe("WalletSection", () => {
-  test("renders the empty state when the user has no transactions", async () => {
-    mockLedgerEndpoint({ [EMPTY_USER]: [] });
+  test("renders the empty state when the user has no wallet or transactions", async () => {
+    mockWalletEndpoints({ rowsByUser: { [EMPTY_USER]: [] } });
     render(<WalletSection userId={EMPTY_USER} />, { wrapper });
 
     expect(await screen.findByText("No transactions yet")).toBeInTheDocument();
-    // Balance still resolves — to zero, since there's no most-recent row.
-    expect(await screen.findByText("₦0")).toBeInTheDocument();
+    expect(
+      await screen.findByText("This user has no wallet yet.")
+    ).toBeInTheDocument();
   });
 
-  test("renders transactions, the real balance, and pagination for a populated user", async () => {
-    mockLedgerEndpoint({ [POPULATED_USER]: POPULATED_ROWS });
+  test("renders transactions, the wallet record, and pagination for a populated user", async () => {
+    mockWalletEndpoints({
+      rowsByUser: { [POPULATED_USER]: POPULATED_ROWS },
+      walletsByUser: { [POPULATED_USER]: [POPULATED_WALLET] },
+    });
     render(<WalletSection userId={POPULATED_USER} />, { wrapper });
 
-    // Balance = balance_after of the most recent (first) row.
-    expect(await screen.findByText("₦100,000")).toBeInTheDocument();
+    // Balance comes from the wallet record, not the latest ledger row — note
+    // the minor units, which the ledger-derived balance used to drop.
+    expect(await screen.findByText("₦19,000.00")).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.getByText("6850539275")).toBeInTheDocument();
+    expect(screen.getByText("PROVIDUS BANK")).toBeInTheDocument();
 
     await waitFor(() =>
       expect(
@@ -111,6 +144,9 @@ describe("WalletSection", () => {
 
     expect(
       await screen.findByText("Ledger service is down.")
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("Wallet details could not be loaded.")
     ).toBeInTheDocument();
   });
 });

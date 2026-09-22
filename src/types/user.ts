@@ -6,7 +6,7 @@ export type UserAccountStatus =
   | "deleting"
   | "deleted";
 export type VerificationStatus = "verified" | "pending" | "failed";
-export type WalletStatus = "none" | "active" | "frozen" | "closed";
+export type WalletStatus = "none" | "active" | "locked" | "frozen" | "closed";
 export type AccountType = "chat_only" | "chat_banking";
 
 export interface UserRecord {

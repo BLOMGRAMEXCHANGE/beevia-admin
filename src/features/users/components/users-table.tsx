@@ -69,6 +69,7 @@ const VERIFICATION_OPTIONS: { value: VerificationStatus; label: string }[] = [
 const WALLET_OPTIONS: { value: WalletStatus; label: string }[] = [
   { value: "none", label: "None" },
   { value: "active", label: "Active" },
+  { value: "locked", label: "Locked" },
   { value: "frozen", label: "Frozen" },
   { value: "closed", label: "Closed" },
 ];

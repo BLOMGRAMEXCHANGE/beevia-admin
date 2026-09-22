@@ -49,3 +49,28 @@ export function formatDateTime(iso: string): string {
     minute: "2-digit",
   });
 }
+
+const MONEY_FALLBACK_FORMAT = new Intl.NumberFormat("en-NG", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/**
+ * Formats a wallet amount in its own currency — e.g. "₦19,000.00". Unlike
+ * `formatNaira` this keeps the minor units, because a wallet balance is an
+ * exact figure an admin may be reconciling against a bank statement.
+ * Falls back to a plain number plus the raw code for currencies `Intl`
+ * doesn't recognise, rather than throwing.
+ */
+export function formatMoney(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${MONEY_FALLBACK_FORMAT.format(amount)} ${currency}`.trim();
+  }
+}

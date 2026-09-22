@@ -4,6 +4,7 @@ import type { WalletStatus } from "@/types/user";
 const LABEL: Record<WalletStatus, string> = {
   none: "None",
   active: "Active",
+  locked: "Locked",
   frozen: "Frozen",
   closed: "Closed",
 };
@@ -11,6 +12,7 @@ const LABEL: Record<WalletStatus, string> = {
 const TONE: Record<WalletStatus, StatusTone> = {
   none: "gray",
   active: "green",
+  locked: "amber",
   frozen: "blue",
   closed: "red",
 };
